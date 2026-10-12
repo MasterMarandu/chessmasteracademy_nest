@@ -19,6 +19,8 @@ export interface Lesson {
   notes: Record<number, string>;
   defendingSide?: 'white' | 'black';
   defenseMoves?: string[];
+  /** Celada de orden de jugadas: lo que se castiga es una jugada ilegal, no hay línea perdedora que mostrar. */
+  orderTrap?: boolean;
   source?: string;
   // Metadatos de la partida, para exportar PGN fiel sin adivinar en el exportador.
   players?: { white: string; black: string };
@@ -280,7 +282,7 @@ export const traps: Lesson[] = [
   },
   {
     id: 'pin', title: 'La clavada de c3', subtitle: 'Antes de recuperar, protege a tu rey.',
-    defendingSide: 'white',
+    defendingSide: 'white', orderTrap: true,
     notation: '5...Aa5 6. d4 exd4', kind: 'trap', family: 'accepted', level: 'Esencial',
     moves: line('Ba5 d4 exd4 O-O d6 cxd4'), startPly: 12,
     description: 'El alfil de a5 apunta al rey de e1 a través de c3. Después de d4, mover el peón de c3 dejaría al rey en jaque.',
