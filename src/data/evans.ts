@@ -20,6 +20,10 @@ export interface Lesson {
   defendingSide?: 'white' | 'black';
   defenseMoves?: string[];
   source?: string;
+  // Metadatos de la partida, para exportar PGN fiel sin adivinar en el exportador.
+  players?: { white: string; black: string };
+  result?: '1-0' | '0-1' | '1/2-1/2';
+  year?: number;
 }
 
 // The shared trunk of the Italian Game: both the Giuoco Piano and the Evans
@@ -310,6 +314,7 @@ export const games: Lesson[] = [
     warning: 'Una partida histórica no es una variante forzada. Las negras tuvieron mejoras; estudia los patrones, no una promesa de victoria.',
     notes: { 19: 'Te1 ocupa la columna del rey negro.', 21: 'Aa3 dificulta el enroque.', 33: 'Cf6+ abre líneas hacia el rey.', 37: 'Tad1 incorpora la última torre.', 39: 'Txe7+ inicia la combinación final.', 41: 'Dxd7+ sacrifica la dama para atraer al rey.', 47: 'Axe7 es mate: los dos alfiles culminan el ataque.' },
     source: 'https://jhlywa.github.io/chess.js/',
+    players: { white: 'Adolf Anderssen', black: 'Jean Dufresne' }, result: '1-0', year: 1852,
   },
   {
     id: 'fischer-fine', title: 'Fischer vs. Fine', subtitle: 'Una lección de iniciativa · Nueva York, 1963',
@@ -321,25 +326,37 @@ export const games: Lesson[] = [
     warning: 'Fine abandonó tras 17. Dg3. La partida no terminó en mate sobre el tablero; 17...Dxg3 permitiría 18. Af6#.',
     notes: { 18: 'Cf6 permite Cd5 con amenaza a la dama.', 19: 'Cd5 aprovecha la ventaja de desarrollo.', 25: 'Ab2 se desarrolla con ganancia de tiempo.', 27: 'h4 vuelve a atacar la dama.', 31: 'Tfe1 coloca la torre frente al rey.', 33: 'Dg3! Fine abandonó. Si ...Dxg3, Af6 sería mate.' },
     source: 'https://www.chessgames.com/perl/chessgame?gid=1043992',
+    players: { white: 'Bobby Fischer', black: 'Reuben Fine' }, result: '1-0', year: 1963,
   },
 ];
 
 export interface Exercise {
   id: string; title: string; prompt: string; moves: string[];
   answer: string; hint: string; explanation: string;
+  topic: 'opening' | 'defense' | 'trap';
 }
 export const exercises: Exercise[] = [
-  { id: 'offer', title: 'El primer paso', prompt: '¿Cómo comienza el gambito Evans? Desvía el alfil para ganar tiempos en el centro.', moves: BASE.slice(0, 6), answer: 'b4', hint: 'El peón de b2 puede atacar al alfil de c5.', explanation: 'b4! ofrece un peón para desviar el alfil. La idea es continuar con c3 y d4.' },
-  { id: 'tempo', title: 'Desarrollar con una amenaza', prompt: 'Ataca al alfil y prepara d4 en una sola jugada.', moves: [...BASE, 'Bxb4'], answer: 'c3', hint: 'El peón de c2 puede cumplir dos funciones a la vez.', explanation: 'c3 gana un tiempo y sostiene el futuro centro con d4.' },
-  { id: 'safe-bishop', title: 'La retirada moderna', prompt: 'Juegas con negras. Lleva el alfil a e7, donde no bloqueará el peón de d7.', moves: accepted, answer: 'Be7', hint: 'El alfil puede retroceder por la diagonal c5-d6-e7.', explanation: 'Ae7 evita ataques de los peones centrales y prepara el desarrollo.' },
-  { id: 'castle', title: 'Romper la clavada', prompt: 'Tu peón de c3 está clavado. ¿Cómo pones al rey a salvo antes de recuperar en d4?', moves: line('Ba5 d4 exd4'), answer: 'O-O', hint: 'Mueve el rey de e1 a g1 para enrocar.', explanation: 'O-O! saca al rey de la diagonal a5-e1. Ahora cxd4 vuelve a ser legal.' },
-  { id: 'solid', title: 'Defender como Lasker', prompt: 'Juegas con negras. Sostén e5 con un peón sin abrir todavía el centro.', moves: line('Ba5 d4'), answer: 'd6', hint: 'El peón de d7 puede proteger e5 desde d6.', explanation: 'd6 sostiene el centro y prepara ...Ab6. Devolver material a tiempo es parte de una buena defensa.' },
-  { id: 'sacrifice', title: 'El punto débil: f7', prompt: 'Encuentra el sacrificio con jaque que prepara Dd5+.', moves: line('Bc5 d4 exd4 O-O dxc3'), answer: 'Bxf7+', hint: 'El alfil de c4 puede capturar el peón que solo defiende el rey.', explanation: 'Axf7+! Rxf7 Dd5+ ataca al rey y al alfil. Recuperas material y eliminas el enroque.' },
-  { id: 'triple', title: 'Tres amenazas, una jugada', prompt: 'Juegas con negras. Encuentra el jaque de caballo que también ataca a la dama.', moves: fromBase('Nxb4 Nxe5 Qf6 d4 Bxd4 Qxd4'), answer: 'Nxc2+', hint: 'El caballo de b4 tiene una captura con jaque en c2.', explanation: 'Cxc2+! ataca al rey de e1, a la dama de d4 y a la torre de a1.' },
-  { id: 'mieses-break', title: 'El contragolpe central', prompt: 'Tu caballo ya está en e7. Juega la ruptura que disputa el centro blanco.', moves: line('Ba5 d4 exd4 O-O Nge7 cxd4'), answer: 'd5', hint: 'El peón de d7 puede avanzar dos casillas.', explanation: 'd5! transforma la defensa en contrajuego. Tras exd5, el caballo de e7 puede recuperar.' },
+  { id: 'offer', topic: 'opening', title: 'El primer paso', prompt: '¿Cómo comienza el gambito Evans? Desvía el alfil para ganar tiempos en el centro.', moves: BASE.slice(0, 6), answer: 'b4', hint: 'El peón de b2 puede atacar al alfil de c5.', explanation: 'b4! ofrece un peón para desviar el alfil. La idea es continuar con c3 y d4.' },
+  { id: 'tempo', topic: 'opening', title: 'Desarrollar con una amenaza', prompt: 'Ataca al alfil y prepara d4 en una sola jugada.', moves: [...BASE, 'Bxb4'], answer: 'c3', hint: 'El peón de c2 puede cumplir dos funciones a la vez.', explanation: 'c3 gana un tiempo y sostiene el futuro centro con d4.' },
+  { id: 'safe-bishop', topic: 'defense', title: 'La retirada moderna', prompt: 'Juegas con negras. Lleva el alfil a e7, donde no bloqueará el peón de d7.', moves: accepted, answer: 'Be7', hint: 'El alfil puede retroceder por la diagonal c5-d6-e7.', explanation: 'Ae7 evita ataques de los peones centrales y prepara el desarrollo.' },
+  { id: 'castle', topic: 'trap', title: 'Romper la clavada', prompt: 'Tu peón de c3 está clavado. ¿Cómo pones al rey a salvo antes de recuperar en d4?', moves: line('Ba5 d4 exd4'), answer: 'O-O', hint: 'Mueve el rey de e1 a g1 para enrocar.', explanation: 'O-O! saca al rey de la diagonal a5-e1. Ahora cxd4 vuelve a ser legal.' },
+  { id: 'solid', topic: 'defense', title: 'Defender como Lasker', prompt: 'Juegas con negras. Sostén e5 con un peón sin abrir todavía el centro.', moves: line('Ba5 d4'), answer: 'd6', hint: 'El peón de d7 puede proteger e5 desde d6.', explanation: 'd6 sostiene el centro y prepara ...Ab6. Devolver material a tiempo es parte de una buena defensa.' },
+  { id: 'sacrifice', topic: 'trap', title: 'El punto débil: f7', prompt: 'Encuentra el sacrificio con jaque que prepara Dd5+.', moves: line('Bc5 d4 exd4 O-O dxc3'), answer: 'Bxf7+', hint: 'El alfil de c4 puede capturar el peón que solo defiende el rey.', explanation: 'Axf7+! Rxf7 Dd5+ ataca al rey y al alfil. Recuperas material y eliminas el enroque.' },
+  { id: 'triple', topic: 'trap', title: 'Tres amenazas, una jugada', prompt: 'Juegas con negras. Encuentra el jaque de caballo que también ataca a la dama.', moves: fromBase('Nxb4 Nxe5 Qf6 d4 Bxd4 Qxd4'), answer: 'Nxc2+', hint: 'El caballo de b4 tiene una captura con jaque en c2.', explanation: 'Cxc2+! ataca al rey de e1, a la dama de d4 y a la torre de a1.' },
+  { id: 'mieses-break', topic: 'defense', title: 'El contragolpe central', prompt: 'Tu caballo ya está en e7. Juega la ruptura que disputa el centro blanco.', moves: line('Ba5 d4 exd4 O-O Nge7 cxd4'), answer: 'd5', hint: 'El peón de d7 puede avanzar dos casillas.', explanation: 'd5! transforma la defensa en contrajuego. Tras exd5, el caballo de e7 puede recuperar.' },
 ];
 
 export const allLessons = [...italianLines, ...variants, ...traps, ...games];
+
+// Identificadores estables que usa la interfaz. Los tests comprueban que existen,
+// de modo que renombrar una lección falle en CI y no en silencio en la interfaz.
+export const LESSON_IDS = {
+  main: 'main', lasker: 'lasker', modern: 'modern', declined: 'declined', compromised: 'compromised',
+} as const;
+
+export function lessonById(id: string): Lesson {
+  return allLessons.find((lesson) => lesson.id === id) ?? allLessons[0];
+}
 
 // Qualitative "agudeza" meter: how forced and double-edged a line tends to be.
 // It is a study aid, not an engine evaluation.
@@ -358,6 +375,13 @@ export function makeGame(moves: string[], ply = moves.length): Chess {
   const game = new Chess();
   moves.slice(0, ply).forEach((move) => game.move(move));
   return game;
+}
+
+// Código ECO dentro de la familia Evans: C52 cuando el alfil se retira a a5
+// (gambito aceptado), C51 en el resto (rehusado u otras respuestas).
+// El conocimiento vive aquí, con los datos, no en el exportador de PGN.
+export function ecoFor(sequence: string[]): string {
+  return sequence[9] === 'Ba5' ? 'C52' : 'C51';
 }
 export function spanishSan(san: string): string {
   return san.replace(/[KQRBN]/g, (piece) => ({ K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' })[piece] || piece);

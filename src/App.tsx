@@ -1,38 +1,53 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { PieceSymbol, Square } from 'chess.js';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
 import {
-  ArrowDownUp, ArrowLeft, ArrowRight, BookOpen, Bookmark, Check, CheckCheck,
-  ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  CircleHelp, Copy, Crown, Download, GitBranch, Info, Lightbulb, ListTree,
-  Maximize2, Menu, Minimize2, MousePointer2, Network, Pause, Play, RotateCcw,
+  ArrowLeft, ArrowRight, BookOpen, Bookmark, Check, CheckCheck,
+  ChevronDown, ChevronRight, CircleHelp, Copy, Crown, Download, GitBranch, Info, Lightbulb, ListTree,
+  Menu, MousePointer2, Network, Play, RotateCcw,
   Search, Shield, Target, X, Zap,
 } from 'lucide-react';
-import ChessBoard from './components/ChessBoard';
+import BoardColumn from './components/BoardColumn';
 import { KnightMark } from './components/ChessPiece';
 import Modal from './components/Modal';
 import VariationTree from './components/VariationTree';
+import { useStudySession } from './hooks/useStudySession';
+import LessonList from './panels/LessonList';
+import type { StudyUi } from './panels/types';
+import type { View } from './state/session';
 import {
-  allLessons, BASE, baseNotes, exercises, games, italianLines, italianNotes, libraryErrors,
-  makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, TRUNK, traps, variants,
-  type Family, type Lesson,
+  allLessons, BASE, ecoFor, exercises, games, italianLines, LESSON_IDS,
+  lessonById, libraryErrors, makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, TRUNK,
+  traps, variants, type Lesson,
 } from './data/evans';
-
-type View = 'italian' | 'explorer' | 'tree' | 'ideas' | 'traps' | 'defense' | 'practice' | 'repertoire' | 'games';
 
 // Etiqueta de la miga de pan: dónde estás dentro de la biblioteca.
 const SECTION_LABELS: Record<View, string> = {
   italian: 'Apertura Italiana', explorer: 'Gambito Evans', tree: 'Árbol de variantes',
   ideas: 'Ideas y planes', traps: 'Patrones tácticos', defense: 'Defensa del Evans',
-  practice: 'Entrenamiento', repertoire: 'Mi repertorio', games: 'Partidas clásicas',
+  repertoire: 'Mi repertorio', games: 'Partidas clásicas',
 };
-type Feedback = 'idle' | 'wrong' | 'correct' | 'revealed';
 
-function useStoredList(key: string) {
-  const [value, setValue] = useState<string[]>(() => {
+// Lecciones referenciadas por la interfaz: por identificador, nunca por posición en el array.
+const MAIN_LINE = lessonById(LESSON_IDS.main);
+const LASKER = lessonById(LESSON_IDS.lasker);
+const MODERN = lessonById(LESSON_IDS.modern);
+const DECLINED = lessonById(LESSON_IDS.declined);
+const COMPROMISED = lessonById(LESSON_IDS.compromised);
+const LESSON_IDS_SET = new Set(allLessons.map((lesson) => lesson.id));
+const EXERCISE_IDS_SET = new Set(exercises.map((exercise) => exercise.id));
+// Ply de la posición con el centro montado (d4-e4) en la línea principal,
+// y de la jugada 5. c3 que gana un tiempo sobre el alfil.
+const CENTRE_PLY = 15;
+const TEMPO_PLY = BASE.length + 2;
+const FIRST_TRAP_EXERCISE = Math.max(0, exercises.findIndex((exercise) => exercise.topic === 'trap'));
+
+function useStoredList(key: string, valid: Set<string>) {  const [value, setValue] = useState<string[]>(() => {
     try {
       const stored: unknown = JSON.parse(localStorage.getItem(key) || '[]');
-      return Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : [];
+      // Se descartan los identificadores que ya no existen en la biblioteca.
+      return Array.isArray(stored)
+        ? stored.filter((item): item is string => typeof item === 'string' && valid.has(item))
+        : [];
     } catch { return []; }
   });
   useEffect(() => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Study remains available when storage is blocked. */ } }, [key, value]);
@@ -58,20 +73,6 @@ function SharpnessMeter({ id, size = 'sm', label = true }: { id: string; size?: 
   );
 }
 
-function MoveStrip({ moves, ply, onSelect, disabled = false }: { moves: string[]; ply: number; onSelect: (ply: number) => void; disabled?: boolean }) {
-  const strip = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const active = strip.current?.querySelector<HTMLElement>('[aria-current="step"]');
-    if (active && strip.current) strip.current.scrollTo({ left: active.offsetLeft - strip.current.clientWidth / 2 + 25, behavior: 'smooth' });
-  }, [ply]);
-  return <div ref={strip} className="move-strip" aria-label="Secuencia de jugadas">
-    {Array.from({ length: Math.ceil(moves.length / 2) }, (_, i) => <span className="move-pair" key={i}>
-      <span className="move-number">{i + 1}.</span>
-      {[i * 2, i * 2 + 1].filter((index) => index < moves.length).map((index) => <button key={index} disabled={disabled} className={ply === index + 1 ? 'current-move' : ''} aria-current={ply === index + 1 ? 'step' : undefined} aria-label={`Jugada ${i + 1}, ${index % 2 === 0 ? 'blancas' : 'negras'}: ${spanishSan(moves[index])}`} onClick={() => onSelect(index + 1)}>{spanishSan(moves[index])}</button>)}
-    </span>)}
-  </div>;
-}
-
 function downloadFile(content: string, name: string) {
   const url = URL.createObjectURL(new Blob([content], { type: 'application/x-chess-pgn;charset=utf-8' }));
   const link = document.createElement('a');
@@ -84,190 +85,88 @@ function downloadFile(content: string, name: string) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('explorer');
-  const [lessonId, setLessonId] = useState<string | null>(null);
-  const [moves, setMoves] = useState<string[]>(BASE);
-  const [ply, setPly] = useState(BASE.length);
-  const [flipped, setFlipped] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [freeAnalysis, setFreeAnalysis] = useState(false);
-  const [defenseLine, setDefenseLine] = useState(false);
-  const [expandedBoard, setExpandedBoard] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-  const [family, setFamily] = useState<Family | 'all'>('all');
-  const [showAll, setShowAll] = useState(false);
-  const [planSide, setPlanSide] = useState<'white' | 'black'>('white');
-  const [saved, setSaved] = useStoredList('evans-repertoire-v1');
-  const [completed, setCompleted] = useStoredList('evans-studied-v1');
-  const [solved, setSolved] = useStoredList('evans-exercises-v1');
-  const [exerciseIndex, setExerciseIndex] = useState(0);
-  const [feedback, setFeedback] = useState<Feedback>('idle');
-  const [showHint, setShowHint] = useState(false);
+  const [saved, setSaved] = useStoredList('evans-repertoire-v1', LESSON_IDS_SET);
+  const [completed, setCompleted] = useStoredList('evans-studied-v1', LESSON_IDS_SET);
+  const [solved, setSolved] = useStoredList('evans-exercises-v1', EXERCISE_IDS_SET);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const [fenOpen, setFenOpen] = useState(false);
-  const [toast, setToast] = useState('');
-  const boardRef = useRef<HTMLElement>(null);
+  const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
-  const lesson = allLessons.find((item) => item.id === lessonId) || null;
-  const game = useMemo(() => makeGame(moves, ply), [moves, ply]);
-  const exercise = exercises[exerciseIndex];
-  const practice = view === 'practice';
-  const exerciseFinished = feedback === 'correct' || feedback === 'revealed';
+  // Toda la sesión de estudio vive en el reducer: modos excluyentes, lado y orientación.
+  const session = useStudySession({
+    onLineCompleted: (id) => setCompleted((current) => current.includes(id) ? current : [...current, id]),
+    onExerciseSolved: (id) => setSolved((current) => current.includes(id) ? current : [...current, id]),
+    onToast: (tone, text) => setToast({ tone, text }),
+  });
+  const {
+    view, lesson, moves, ply, game, expandedBoard, family, showAll, planSide,
+    exercise, exerciseIndex, feedback, showHint, practice, exerciseFinished,
+    navigate, openLesson: selectLesson, startExercise, loadDefense, reset: resetStudy, jumpTo,
+    togglePlayback, revealAnswer, openTreeLine: selectFromTree,
+    setFamily, toggleShowAll, setPlanSide, toggleExpanded, toggleHint,
+  } = session;
+  const defenseLine = session.isMode('defense');
+  const ui: StudyUi = {
+    saved, solved, completed,
+    toggleSaved,
+    toggleCompleted: (id) => setCompleted((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]),
+    notify: (tone, text) => setToast({ tone, text }),
+    closeSearch: () => setSearchOpen(false),
+  };
+
   const studiedCount = allLessons.filter((item) => completed.includes(item.id)).length;
   const librarySize = allLessons.length;
   const searchResults = allLessons.filter((item) => normalizeSearch(`${item.title} ${item.subtitle} ${item.notation}`).includes(normalizeSearch(searchQuery)));
-  const hintSquare = useMemo(() => {
-    if (!practice || !showHint || exerciseFinished) return undefined;
-    return makeGame(exercise.moves).move(exercise.answer).from;
-  }, [practice, showHint, exerciseFinished, exercise]);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(''), 3400);
+    const timer = window.setTimeout(() => setToast(null), 3400);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const keyHandler = (event: KeyboardEvent) => {
+    const target = event.target as HTMLElement;
+    const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setHelpOpen(false); setFenOpen(false); setSearchOpen((current) => !current); return; }
+    if (event.key === '/' && !typing) { event.preventDefault(); setHelpOpen(false); setFenOpen(false); setSearchOpen(true); return; }
+    if (event.key === 'Escape') { setSearchOpen(false); setHelpOpen(false); setFenOpen(false); setMobileNav(false); if (expandedBoard) toggleExpanded(); return; }
+    if (typing || searchOpen || helpOpen || fenOpen || practice) return;
+    if (event.key === 'ArrowLeft') { event.preventDefault(); jumpTo(ply - 1); }
+    if (event.key === 'ArrowRight') { event.preventDefault(); jumpTo(ply + 1); }
+    if (event.key === 'Home') { event.preventDefault(); jumpTo(0); }
+    if (event.key === 'End') { event.preventDefault(); jumpTo(moves.length); }
+    if (event.code === 'Space' && target.tagName !== 'BUTTON' && target.tagName !== 'A') { event.preventDefault(); togglePlayback(); }
+  };
+
+  // El manejador se registra una sola vez y siempre lee el estado más reciente:
+  // así no hay cierres obsoletos cuando cambian ply, moves o el modo de estudio.
+  const keyHandlerRef = useRef(keyHandler);
+  useEffect(() => { keyHandlerRef.current = keyHandler; });
   useEffect(() => {
-    if (!playing) return;
-    const timer = window.setInterval(() => setPly((current) => Math.min(current + 1, moves.length)), 1000);
-    return () => window.clearInterval(timer);
-  }, [playing, moves.length]);
+    const listener = (event: KeyboardEvent) => keyHandlerRef.current(event);
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
 
-  useEffect(() => {
-    if (ply >= moves.length) setPlaying(false);
-    if (lesson && ply === moves.length && !freeAnalysis && !defenseLine && moves.length === lesson.moves.length) {
-      setCompleted((current) => current.includes(lesson.id) ? current : [...current, lesson.id]);
-    }
-  }, [ply, moves.length, lesson, freeAnalysis, defenseLine, setCompleted]);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setHelpOpen(false); setFenOpen(false); setSearchOpen((current) => !current); return; }
-      if (event.key === '/' && !typing) { event.preventDefault(); setHelpOpen(false); setFenOpen(false); setSearchOpen(true); return; }
-      if (event.key === 'Escape') { setSearchOpen(false); setHelpOpen(false); setFenOpen(false); setMobileNav(false); setExpandedBoard(false); return; }
-      if (typing || searchOpen || helpOpen || fenOpen || practice) return;
-      if (event.key === 'ArrowLeft') { event.preventDefault(); setPlaying(false); setPly((current) => Math.max(0, current - 1)); }
-      if (event.key === 'ArrowRight') { event.preventDefault(); setPlaying(false); setPly((current) => Math.min(moves.length, current + 1)); }
-      if (event.key === 'Home') { event.preventDefault(); setPlaying(false); setPly(0); }
-      if (event.key === 'End') { event.preventDefault(); setPlaying(false); setPly(moves.length); }
-      if (event.code === 'Space' && target.tagName !== 'BUTTON' && target.tagName !== 'A') { event.preventDefault(); togglePlayback(); }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [searchOpen, helpOpen, fenOpen, practice, moves.length, ply, playing]);
-
-  function revealBoardOnMobile() {
-    if (!window.matchMedia('(max-width: 700px)').matches) return;
-    window.requestAnimationFrame(() => boardRef.current?.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start',
-    }));
+  // Las acciones de estudio viven en el hook; aquí sólo queda lo que toca la interfaz.
+  function showPosition(nextMoves: string[], nextPly: number) {
+    session.showPosition(nextMoves, nextPly);
   }
 
-  function startExercise(index = 0) {
-    const next = exercises[(index + exercises.length) % exercises.length];
-    setExerciseIndex((index + exercises.length) % exercises.length);
-    setView('practice'); setLessonId(null); setMoves(next.moves); setPly(next.moves.length);
-    setFlipped(makeGame(next.moves).turn() === 'b'); setFeedback('idle'); setShowHint(false);
-    setPlaying(false); setFreeAnalysis(false); setDefenseLine(false); setExpandedBoard(false); setMobileNav(false);
-    revealBoardOnMobile();
-  }
-
-  function navigate(next: View) {
-    if (next === 'practice') { startExercise(); return; }
-    const opening = next === 'italian' ? TRUNK : BASE;
-    setView(next); setLessonId(null); setMoves(opening); setPly(opening.length);
-    setPlaying(false); setFreeAnalysis(false); setDefenseLine(false); setExpandedBoard(false);
-    setMobileNav(false); setFamily('all'); setShowAll(false); setFlipped(next === 'defense');
-  }
-
-  function selectLesson(next: Lesson, side?: 'white' | 'black') {
-    try { makeGame(next.moves); } catch { setToast('Esta línea no está disponible. Prueba otra variante.'); return; }
-    const nextView: View = next.kind === 'trap' ? 'traps' : next.kind === 'game' ? 'games' : (view === 'defense' || view === 'repertoire' || view === 'italian') ? view : 'explorer';
-    setView(nextView); setLessonId(next.id); setMoves(next.moves); setPly(next.startPly);
-    setPlanSide(side || (nextView === 'defense' ? 'black' : 'white'));
-    setPlaying(false); setFreeAnalysis(false); setDefenseLine(false); setSearchOpen(false);
-    setMobileNav(false); setExpandedBoard(false);
-    if (side === 'black' || nextView === 'defense') setFlipped(true);
-    revealBoardOnMobile();
-  }
-
-  function resetStudy() {
-    if (practice) { startExercise(exerciseIndex); return; }
-    const opening = view === 'italian' ? TRUNK : BASE;
-    setMoves(lesson?.moves || opening); setPly(lesson?.startPly || opening.length);
-    setPlaying(false); setFreeAnalysis(false); setDefenseLine(false);
-  }
-
-  function jumpTo(next: number) { setPlaying(false); setPly(Math.max(0, Math.min(moves.length, next))); }
-
-  function selectFromTree(path: string[], nodePly: number) {
-    setPlaying(false); setFreeAnalysis(false); setDefenseLine(false);
-    if (!path.length) { setLessonId(null); setMoves(TRUNK); setPly(0); return; }
-    const key = path.join();
-    const match = allLessons
-      .filter((item) => item.moves.slice(0, path.length).join() === key)
-      .sort((a, b) => (a.kind === 'game' ? 1 : 0) - (b.kind === 'game' ? 1 : 0)
-        || Math.abs(a.moves.length - path.length) - Math.abs(b.moves.length - path.length))[0] || null;
-    setLessonId(match?.id ?? null);
-    setMoves(match?.moves ?? path);
-    setPly(nodePly);
-    if (match) setPlanSide(nodePly % 2 === 0 ? 'black' : 'white');
-    revealBoardOnMobile();
-  }
-
-  function togglePlayback() {
-    if (practice) return;
-    if (ply === moves.length) setPly(0);
-    setPlaying((current) => !current);
+  function openSearchResult(item: Lesson) {
+    selectLesson(item);
+    setSearchOpen(false);
   }
 
   function toggleSaved(item: Lesson) {
     const removing = saved.includes(item.id);
     setSaved((current) => removing ? current.filter((id) => id !== item.id) : [...current, item.id]);
-    setToast(removing ? 'Variante eliminada de tu repertorio.' : 'Guardada en tu repertorio. Puedes volver a ella cuando quieras.');
-  }
-
-  function onBoardMove(from: Square, to: Square, promotion: PieceSymbol = 'q') {
-    if (practice && exerciseFinished) return;
-    const nextGame = makeGame(moves, ply);
-    try {
-      const move = nextGame.move({ from, to, promotion });
-      if (practice) {
-        const expected = makeGame(exercise.moves).move(exercise.answer);
-        if (move.san !== expected.san) { setFeedback('wrong'); return; }
-        setMoves([...exercise.moves, move.san]); setPly(exercise.moves.length + 1);
-        setFeedback('correct'); setShowHint(false);
-        setSolved((current) => current.includes(exercise.id) ? current : [...current, exercise.id]);
-        return;
-      }
-      setPlaying(false);
-      const expected = moves[ply] ? makeGame(moves, ply).move(moves[ply]).san : null;
-      if (move.san === expected) { setPly(ply + 1); return; }
-      setMoves([...moves.slice(0, ply), move.san]); setPly(ply + 1);
-      if (!freeAnalysis) setToast('Análisis libre: puedes explorar movimientos de ambos bandos.');
-      setFreeAnalysis(true);
-    } catch { setToast('Esa jugada no es legal en esta posición.'); }
-  }
-
-  function revealAnswer() {
-    setMoves([...exercise.moves, exercise.answer]); setPly(exercise.moves.length + 1);
-    setFeedback('revealed'); setShowHint(false);
-  }
-
-  function loadDefense() {
-    if (!lesson?.defenseMoves) return;
-    const divergence = lesson.moves.findIndex((move, index) => move !== lesson.defenseMoves?.[index]);
-    const start = divergence < 0 ? lesson.startPly : divergence;
-    setMoves(lesson.defenseMoves); setPly(start);
-    setFlipped(makeGame(lesson.defenseMoves, start).turn() === 'b');
-    setDefenseLine(true); setFreeAnalysis(false); setPlaying(false); setPlanSide('black');
-    setToast('Defensa alternativa cargada. Avanza para ver la continuación.');
-    revealBoardOnMobile();
+    setToast(removing
+      ? { tone: 'ok', text: 'Variante eliminada de tu repertorio.' }
+      : { tone: 'ok', text: 'Guardada en tu repertorio. Puedes volver a ella cuando quieras.' });
   }
 
   function buildPgn(item: Lesson | null, sequence: string[]) {
@@ -277,22 +176,26 @@ export default function App() {
       result.move(move);
       if (original && item?.notes[index + 1]) result.setComment(item.notes[index + 1]);
     });
-    result.setHeader('Event', item?.title || 'Apertura Italiana - Análisis');
-    result.setHeader('White', item?.id === 'evergreen' ? 'Adolf Anderssen' : item?.id === 'fischer-fine' ? 'Bobby Fischer' : 'Blancas');
-    result.setHeader('Black', item?.id === 'evergreen' ? 'Jean Dufresne' : item?.id === 'fischer-fine' ? 'Reuben Fine' : 'Negras');
+    // Los metadatos salen de los datos; el exportador no adivina ni miente sobre el contenido.
+    result.setHeader('Event', item
+      ? (original ? item.title : `Análisis libre a partir de ${item.title}`)
+      : 'Análisis libre · Apertura Italiana');
+    result.setHeader('White', item?.players?.white ?? 'Blancas');
+    result.setHeader('Black', item?.players?.black ?? 'Negras');
+    if (item?.year) result.setHeader('Date', String(item.year));
     // El código ECO sólo se declara donde está verificado: el Evans aceptado o rehusado.
-    if (item && item.family !== 'italian') result.setHeader('ECO', sequence[9] === 'Ba5' ? 'C52' : 'C51');
-    if (item?.kind === 'game' && sequence.join() === item.moves.join()) result.setHeader('Result', '1-0');
+    if (item && item.family !== 'italian') result.setHeader('ECO', ecoFor(sequence));
+    if (original && item?.result) result.setHeader('Result', item.result);
     return result.pgn();
   }
 
   function exportStudy() {
     downloadFile(buildPgn(lesson, moves), `evans-${lesson?.id || 'analisis'}.pgn`);
-    setToast('Archivo PGN preparado para descargar.');
+    setToast({ tone: 'ok', text: 'Archivo PGN preparado para descargar.' });
   }
 
   async function copyFen() {
-    try { await navigator.clipboard.writeText(game.fen()); setToast('Posición FEN copiada al portapapeles.'); }
+    try { await navigator.clipboard.writeText(game.fen()); setToast({ tone: 'ok', text: 'Posición FEN copiada al portapapeles.' }); }
     catch { setFenOpen(true); }
   }
 
@@ -307,25 +210,9 @@ export default function App() {
 
   function areaProps(target: View | View[]) {
     const views = Array.isArray(target) ? target : [target];
-    const active = views.includes(view);
+    // Durante el entrenamiento sólo se resalta esa entrada: no hay sección activa detrás.
+    const active = !practice && views.includes(view);
     return { className: active ? 'active' : '', 'aria-current': active ? 'page' as const : undefined };
-  }
-
-  function renderLessonRows(items: Lesson[], showLevel = true) {
-    return <div className="variant-list">{items.map((item, index) => <motion.div className="variant-list-item" key={item.id}
-      initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-8px' }}
-      transition={{ duration: 0.34, delay: Math.min(index * 0.045, 0.25), ease: 'easeOut' }}>
-      <button className={`variant-row ${item.id === 'main' && view === 'explorer' ? 'recommended' : ''}`} onClick={() => selectLesson(item)}>
-        <span className={`variant-symbol ${item.kind === 'trap' ? 'tactical' : ''}`}>{item.kind === 'trap' ? <Zap size={19} /> : item.kind === 'game' ? <Crown size={20} /> : <span>{String(index + 1).padStart(2, '0')}</span>}</span>
-        <span className="variant-copy"><span className="variant-title">{item.title}{completed.includes(item.id) && <Check size={13} className="completed-tick" />}</span><span className="variant-notation">{item.notation}</span></span>
-        <span className="row-meta">
-          {item.id === 'main' && view === 'explorer' ? <span className="recommended-cta"><span>Explorar línea<ArrowRight size={12} /></span></span> : showLevel && <span className={`level level-${item.level.toLowerCase()}`}>{item.level}</span>}
-          <SharpnessMeter id={item.id} />
-        </span>
-        <ChevronRight size={16} className="row-chevron" />
-      </button>
-      {view === 'repertoire' && <IconButton label={`Quitar ${item.title} del repertorio`} onClick={() => toggleSaved(item)}><Bookmark size={17} fill="currentColor" /></IconButton>}
-    </motion.div>)}</div>;
   }
 
   function renderDetail() {
@@ -338,11 +225,11 @@ export default function App() {
       <div className="detail-title-row"><h2>{lesson.title}</h2><IconButton label={saved.includes(lesson.id) ? 'Quitar del repertorio' : 'Guardar en mi repertorio'} onClick={() => toggleSaved(lesson)} className={saved.includes(lesson.id) ? 'is-saved' : ''}><Bookmark size={21} fill={saved.includes(lesson.id) ? 'currentColor' : 'none'} /></IconButton></div>
       <div className="detail-meta"><p className="detail-notation">{lesson.notation}</p><p className="detail-sharp"><span>Agudeza</span><SharpnessMeter id={lesson.id} size="lg" /><em>{sharpnessLabel(sharpness[lesson.id] ?? 3)}</em></p></div>
       <p className="detail-description">{lesson.description}</p>
-      <div className="plan-switch" role="tablist" aria-label="Planes por bando">
-        <button role="tab" aria-selected={planSide === 'white'} className={planSide === 'white' ? 'active' : ''} onClick={() => setPlanSide('white')}>{whiteDefender ? <Zap size={14} /> : <span className="side-dot white" />}{whiteDefender ? 'La idea táctica' : 'Plan de blancas'}</button>
-        <button role="tab" aria-selected={planSide === 'black'} className={planSide === 'black' ? 'active' : ''} onClick={() => setPlanSide('black')}><Shield size={14} />Cómo defenderte</button>
+      <div className="plan-switch" role="group" aria-label="Plan por bando">
+        <button aria-pressed={planSide === 'white'} className={planSide === 'white' ? 'active' : ''} onClick={() => setPlanSide('white')}>{whiteDefender ? <Zap size={14} /> : <span className="side-dot white" />}{whiteDefender ? 'La idea táctica' : 'Plan de blancas'}</button>
+        <button aria-pressed={planSide === 'black'} className={planSide === 'black' ? 'active' : ''} onClick={() => setPlanSide('black')}><Shield size={14} />Cómo defenderte</button>
       </div>
-      <AnimatePresence mode="wait"><motion.div key={planSide} className="plan-content" role="tabpanel" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+      <AnimatePresence mode="wait"><motion.div key={planSide} className="plan-content" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
         <h3>{planSide === 'white' ? whiteDefender ? 'Reconoce la amenaza.' : 'Juega con un propósito.' : whiteDefender ? 'Evita la trampa con blancas.' : 'Neutraliza la iniciativa.'}</h3>
         <p>{planSide === 'white' ? attackingPlan : defendingPlan}</p>
         {planSide === 'black' && lesson.defenseMoves && <button className="text-button" onClick={loadDefense}><Play size={14} />Ver la defensa en el tablero<ArrowRight size={14} /></button>}
@@ -385,17 +272,17 @@ export default function App() {
     const visible = showAll ? filtered : filtered.slice(0, 5);
     return <>
       <div className="panel-intro explorer-intro"><h2>Una apertura. Muchos caminos.</h2><p>Entiende cada respuesta. Encuentra tu forma de jugar. Las líneas se cargan directamente en el tablero.</p></div>
-      <div className="list-heading"><h3>Variantes principales</h3><span>{variants.length} líneas de estudio</span></div>
-      <div className="family-filter" role="group" aria-label="Filtrar variantes">{([['all', 'Todas'], ['accepted', 'Aceptado'], ['declined', 'Rehusado'], ['other', 'Otras']] as const).map(([value, label]) => <button key={value} aria-pressed={family === value} className={family === value ? 'active' : ''} onClick={() => { setFamily(value); setShowAll(false); }}>{label}{value === 'all' && <span>{variants.length}</span>}</button>)}</div>
+      <div className="list-heading"><h3>Variantes principales</h3><span>{variants.length} variantes del Evans</span></div>
+      <div className="family-filter" role="group" aria-label="Filtrar variantes">{([['all', 'Todas'], ['accepted', 'Aceptado'], ['declined', 'Rehusado'], ['other', 'Otras']] as const).map(([value, label]) => <button key={value} aria-pressed={family === value} className={family === value ? 'active' : ''} onClick={() => setFamily(value)}>{label}{value === 'all' && <span>{variants.length}</span>}</button>)}</div>
       <p className="list-legend"><Info size={13} /><span><strong>Esencial · Intermedia · Avanzada</strong> indica por dónde empezar. <strong>Agudeza</strong> mide cuán forzada y táctica es la línea, de Sólida a Letal.</span></p>
-      {renderLessonRows(visible)}
-      {filtered.length > 5 && <button className="show-all-button" onClick={() => setShowAll((current) => !current)}>{showAll ? 'Mostrar las esenciales' : `Ver las ${filtered.length} variantes`}<ChevronDown size={15} className={showAll ? 'rotated' : ''} /></button>}
+      <LessonList items={visible} session={session} ui={ui} />
+      {filtered.length > 5 && <button className="show-all-button" onClick={toggleShowAll}>{showAll ? 'Mostrar las esenciales' : `Ver las ${filtered.length} variantes`}<ChevronDown size={15} className={showAll ? 'rotated' : ''} /></button>}
       <div className="defense-invitation">
         <div className="defense-invitation-head"><span className="defense-invitation-icon"><Shield size={20} strokeWidth={1.7} /></span><div><strong>¿Y si juegas con negras?</strong><p>Defender el Evans no es sufrir: es devolver el peón en el momento exacto y quedarse con un desarrollo sano.</p></div></div>
         <div className="defense-invitation-grid">
-          <button onClick={() => selectLesson(variants[1], 'black')}><span>Defensa Lasker</span><small>5...Aa5 6. d4 d6 · la respuesta clásica</small></button>
-          <button onClick={() => selectLesson(variants[2], 'black')}><span>Defensa moderna</span><small>5...Ae7 · flexible y poco explorada</small></button>
-          <button onClick={() => selectLesson(variants[3], 'black')}><span>Gambito rehusado</span><small>4...Ab6 · sin cargar teoría pesada</small></button>
+          <button onClick={() => selectLesson(LASKER, 'black')}><span>Defensa Lasker</span><small>5...Aa5 6. d4 d6 · la respuesta clásica</small></button>
+          <button onClick={() => selectLesson(MODERN, 'black')}><span>Defensa moderna</span><small>5...Ae7 · flexible y poco explorada</small></button>
+          <button onClick={() => selectLesson(DECLINED, 'black')}><span>Gambito rehusado</span><small>4...Ab6 · sin cargar teoría pesada</small></button>
         </div>
         <button className="defense-invitation-more" onClick={() => navigate('defense')}>Ver el plan defensivo completo<ArrowRight size={15} /></button>
       </div>
@@ -413,7 +300,7 @@ export default function App() {
         {exerciseFinished && <motion.div className={`exercise-feedback ${feedback === 'correct' ? 'correct' : 'revealed'}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}><span>{feedback === 'correct' ? <CheckCheck size={23} /> : <Lightbulb size={23} />}</span><div><strong>{feedback === 'correct' ? '¡Esa es la idea!' : 'La jugada que buscábamos'} <span className="answer-san">{spanishSan(exercise.answer)}</span></strong><p>{exercise.explanation}</p>{feedback === 'revealed' && <small>Ver la solución no cuenta como ejercicio resuelto.</small>}</div></motion.div>}
         {showHint && !exerciseFinished && <div className="hint-content"><Lightbulb size={18} /><p>{exercise.hint}</p></div>}
       </div>
-      <div className="practice-actions">{exerciseFinished ? <><button className="button button-primary" onClick={() => startExercise(exerciseIndex + 1)}>{exerciseIndex === exercises.length - 1 ? 'Volver a practicar' : 'Siguiente ejercicio'}<ArrowRight size={16} /></button><button className="text-button" onClick={() => startExercise(exerciseIndex)}><RotateCcw size={14} />Reintentar</button></> : <><button className="button button-outline" onClick={() => setShowHint((current) => !current)}><Lightbulb size={16} />{showHint ? 'Ocultar pista' : 'Dame una pista'}</button><button className="text-button" onClick={revealAnswer}>Ver solución</button></>}</div>
+      <div className="practice-actions">{exerciseFinished ? <><button className="button button-primary" onClick={() => startExercise(exerciseIndex + 1)}>{exerciseIndex === exercises.length - 1 ? 'Volver a practicar' : 'Siguiente ejercicio'}<ArrowRight size={16} /></button><button className="text-button" onClick={() => startExercise(exerciseIndex)}><RotateCcw size={14} />Reintentar</button></> : <><button className="button button-outline" onClick={toggleHint}><Lightbulb size={16} />{showHint ? 'Ocultar pista' : 'Dame una pista'}</button><button className="text-button" onClick={revealAnswer}>Ver solución</button></>}</div>
       <div className="practice-tip"><MousePointer2 size={17} /><p>Haz clic en una pieza y después en su destino. También puedes arrastrarla.</p></div>
       {solved.length === exercises.length && <div className="all-complete"><Crown size={24} /><h3>Las ideas ya son tuyas.</h3><p>Has resuelto los {exercises.length} ejercicios. Vuelve a las variantes para seguir profundizando.</p><button className="text-button" onClick={() => navigate('explorer')}>Explorar variantes<ArrowRight size={15} /></button></div>}
     </div>;
@@ -427,32 +314,29 @@ export default function App() {
         <div><span className="small-label">FICHA VINCULADA</span><h4>{lesson.title}</h4><p>{lesson.subtitle}</p></div>
         <div className="tree-lesson-side">
           <SharpnessMeter id={lesson.id} size="lg" />
-          <button className="text-button" onClick={() => setView(lesson.kind === 'trap' ? 'traps' : lesson.kind === 'game' ? 'games' : 'explorer')}>Abrir la ficha completa<ArrowRight size={13} /></button>
+          <button className="text-button" onClick={() => navigate(lesson.kind === 'trap' ? 'traps' : lesson.kind === 'game' ? 'games' : 'explorer')}>Abrir la ficha completa<ArrowRight size={13} /></button>
         </div>
       </div>}
     </>;
     if (lesson) return renderDetail();
     if (view === 'italian') return renderItalian();
     if (view === 'explorer') return renderExplorer();
-    if (view === 'traps') return <><div className="panel-intro"><div className="eyebrow">LA TÁCTICA CAMBIA LA PARTIDA</div><h2>Ve la amenaza antes que tu rival.</h2><p>Cuatro patrones para atacar mejor y no caer en la trampa.</p></div>{renderLessonRows(traps)}<p className="quiet-note"><Info size={15} />Cada celada incluye una explicación y, cuando la posición lo permite, una alternativa defensiva reproducible.</p><button className="button button-outline" onClick={() => startExercise(5)}><Target size={17} />Practicar las celadas<ArrowRight size={16} /></button></>;
-    if (view === 'games') return <><div className="panel-intro"><div className="eyebrow">APRENDE DE LOS MAESTROS</div><h2>Ideas que hicieron historia.</h2><p>Dos partidas completas para ver el gambito en acción.</p></div>{renderLessonRows(games, false)}<div className="editorial-note"><span>1852</span><h3>El ajedrez también puede ser arte.</h3><p>Avanza jugada a jugada, observa cómo se coordinan las piezas y descubre el momento en que la iniciativa se convierte en ataque.</p></div></>;
+    if (view === 'traps') return <><div className="panel-intro"><div className="eyebrow">LA TÁCTICA CAMBIA LA PARTIDA</div><h2>Ve la amenaza antes que tu rival.</h2><p>Cuatro patrones para atacar mejor y no caer en la trampa.</p></div><LessonList items={traps} session={session} ui={ui} /><p className="quiet-note"><Info size={15} />Cada celada incluye una explicación y, cuando la posición lo permite, una alternativa defensiva reproducible.</p><button className="button button-outline" onClick={() => startExercise(FIRST_TRAP_EXERCISE)}><Target size={17} />Practicar las celadas<ArrowRight size={16} /></button></>;
+    if (view === 'games') return <><div className="panel-intro"><div className="eyebrow">APRENDE DE LOS MAESTROS</div><h2>Ideas que hicieron historia.</h2><p>Dos partidas completas para ver el gambito en acción.</p></div><LessonList items={games} session={session} ui={ui} showLevel={false} /><div className="editorial-note"><span>1852</span><h3>El ajedrez también puede ser arte.</h3><p>Avanza jugada a jugada, observa cómo se coordinan las piezas y descubre el momento en que la iniciativa se convierte en ataque.</p></div></>;
     if (view === 'repertoire') {
       const collection = allLessons.filter((item) => saved.includes(item.id));
-      return <><div className="panel-intro"><div className="eyebrow">TU BIBLIOTECA PERSONAL</div><h2>Las líneas que haces tuyas.</h2><p>Tu repertorio se guarda en este navegador.</p></div>{collection.length ? <>{renderLessonRows(collection, false)}<button className="button button-outline repertoire-export" onClick={() => downloadFile(collection.map((item) => buildPgn(item, item.moves)).join('\n\n'), 'mi-repertorio-evans.pgn')}><Download size={16} />Exportar repertorio en PGN</button></> : <div className="empty-state"><Bookmark size={35} strokeWidth={1.2} /><h3>Tu próxima buena idea empieza aquí.</h3><p>Abre una variante y pulsa el marcador para guardarla. Así tendrás tus líneas favoritas siempre a mano.</p><button className="button button-primary" onClick={() => navigate('explorer')}>Explorar variantes<ArrowRight size={16} /></button></div>}</>;
+      return <><div className="panel-intro"><div className="eyebrow">TU BIBLIOTECA PERSONAL</div><h2>Las líneas que haces tuyas.</h2><p>Tu repertorio se guarda en este navegador.</p></div>{collection.length ? <><LessonList items={collection} session={session} ui={ui} showLevel={false} /><button className="button button-outline repertoire-export" onClick={() => downloadFile(collection.map((item) => buildPgn(item, item.moves)).join('\n\n'), 'mi-repertorio-evans.pgn')}><Download size={16} />Exportar repertorio en PGN</button></> : <div className="empty-state"><Bookmark size={35} strokeWidth={1.2} /><h3>Tu próxima buena idea empieza aquí.</h3><p>Abre una variante y pulsa el marcador para guardarla. Así tendrás tus líneas favoritas siempre a mano.</p><button className="button button-primary" onClick={() => navigate('explorer')}>Explorar variantes<ArrowRight size={16} /></button></div>}</>;
     }
-    if (view === 'defense') return <><div className="panel-intro"><div className="eyebrow">AL OTRO LADO DEL TABLERO</div><h2>Defiende con una idea clara.</h2><p>No necesitas conservar el peón. Necesitas recuperar el tiempo.</p></div><div className="defense-principles"><div><span>01</span><p><strong>Tu rey va primero.</strong> Desarrolla y enroca antes de aceptar otro peón.</p></div><div><span>02</span><p><strong>Devuelve para ganar tiempo.</strong> Simplifica cuando la iniciativa blanca crezca.</p></div><div><span>03</span><p><strong>Responde en el centro.</strong> Prepara ...d5 en vez de defenderte pasivamente.</p></div></div><div className="list-heading"><h3>Tres caminos para empezar</h3><Shield size={16} /></div>{renderLessonRows([variants[1], variants[2], variants[3]], false)}<button className="show-all-button" onClick={() => { setView('explorer'); setShowAll(true); }}>Ver todas las respuestas<ArrowRight size={15} /></button></>;
+    if (view === 'defense') return <><div className="panel-intro"><div className="eyebrow">AL OTRO LADO DEL TABLERO</div><h2>Defiende con una idea clara.</h2><p>No necesitas conservar el peón. Necesitas recuperar el tiempo.</p></div><div className="defense-principles"><div><span>01</span><p><strong>Tu rey va primero.</strong> Desarrolla y enroca antes de aceptar otro peón.</p></div><div><span>02</span><p><strong>Devuelve para ganar tiempo.</strong> Simplifica cuando la iniciativa blanca crezca.</p></div><div><span>03</span><p><strong>Responde en el centro.</strong> Prepara ...d5 en vez de defenderte pasivamente.</p></div></div><div className="list-heading"><h3>Tres caminos para empezar</h3><Shield size={16} /></div><LessonList items={[LASKER, MODERN, DECLINED]} session={session} ui={ui} showLevel={false} /><button className="show-all-button" onClick={() => { navigate('explorer'); toggleShowAll(); }}>Ver todas las respuestas<ArrowRight size={15} /></button></>;
     return <><div className="panel-intro"><div className="eyebrow">ENTIENDE EL PORQUÉ</div><h2>No es un peón. Es tiempo.</h2><p>Tres ideas que dan sentido a cada movimiento.</p></div><div className="concept-list">
-      <button onClick={() => { setMoves([...BASE, 'Bxb4', 'c3']); setPly(9); setFreeAnalysis(false); setPlaying(false); }}><span className="concept-number">01</span><div><h3>Desarrolla con amenazas.</h3><p>c3 ataca al alfil y prepara d4. Una jugada, dos propósitos: así conviertes el peón en tiempos.</p><span>Ver 5. c3 en el tablero<ArrowRight size={14} /></span></div></button>
-      <button onClick={() => { setMoves(variants[0].moves); setPly(15); setFreeAnalysis(false); setPlaying(false); }}><span className="concept-number">02</span><div><h3>Haz del centro tu territorio.</h3><p>Los peones en d4 y e4 abren diagonales y dan espacio a tus piezas. La iniciativa nace en el centro.</p><span>Explorar el centro<ArrowRight size={14} /></span></div></button>
-      <button onClick={() => selectLesson(variants[6])}><span className="concept-number">03</span><div><h3>Ataca con todas tus piezas.</h3><p>Db3 y Aa3 presionan f7 y dificultan el enroque. Antes de sacrificar otra vez, termina tu desarrollo.</p><span>Ver el plan de ataque<ArrowRight size={14} /></span></div></button>
+      <button onClick={() => showPosition([...BASE, 'Bxb4', 'c3'], TEMPO_PLY)}><span className="concept-number">01</span><div><h3>Desarrolla con amenazas.</h3><p>c3 ataca al alfil y prepara d4. Una jugada, dos propósitos: así conviertes el peón en tiempos.</p><span>Ver 5. c3 en el tablero<ArrowRight size={14} /></span></div></button>
+      <button onClick={() => showPosition(MAIN_LINE.moves, CENTRE_PLY)}><span className="concept-number">02</span><div><h3>Haz del centro tu territorio.</h3><p>Los peones en d4 y e4 abren diagonales y dan espacio a tus piezas. La iniciativa nace en el centro.</p><span>Explorar el centro<ArrowRight size={14} /></span></div></button>
+      <button onClick={() => selectLesson(COMPROMISED)}><span className="concept-number">03</span><div><h3>Ataca con todas tus piezas.</h3><p>Db3 y Aa3 presionan f7 y dificultan el enroque. Antes de sacrificar otra vez, termina tu desarrollo.</p><span>Ver el plan de ataque<ArrowRight size={14} /></span></div></button>
     </div><button className="button button-outline" onClick={() => startExercise()}><Target size={16} />Lleva las ideas a la práctica<ArrowRight size={15} /></button></>;
   }
 
-  const currentNote = freeAnalysis ? 'Estás explorando tu propia línea. Puedes mover ambos bandos, retroceder o volver al estudio original. No hay un motor jugando.' : defenseLine ? (lesson?.defendingSide === 'white' ? lesson.whitePlan : lesson?.blackPlan) : practice ? (exerciseFinished ? exercise.explanation : 'Observa la posición y juega en el tablero. La respuesta está en la idea, no en memorizar.') : lesson?.notes[ply] || (view === 'italian' ? italianNotes[ply] : undefined) || baseNotes[ply] || (view === 'ideas' ? variants[0].notes[ply] : undefined) || 'Observa el centro, la seguridad de los reyes y las piezas que todavía necesitan desarrollarse.';
-  const boardTitle = practice ? `Ejercicio ${exerciseIndex + 1}` : freeAnalysis ? 'Análisis libre' : defenseLine ? 'La defensa alternativa' : lesson ? lesson.title : view === 'italian' ? 'La apertura italiana' : view === 'ideas' && ply > 7 ? 'La idea sobre el tablero' : 'Posición inicial del Evans';
-  const gambitMoment = ply === 7 && !practice && view !== 'italian' && lesson?.family !== 'italian';
-
   return <MotionConfig reducedMotion="user"><div className="app-shell">
+    <a className="skip-link" href="#main">Saltar al contenido</a>
     {mobileNav && <button className="sidebar-scrim" onClick={() => setMobileNav(false)} aria-label="Cerrar menú" />}
     <aside className={`sidebar ${mobileNav ? 'is-open' : ''}`}>
       <button className="brand" onClick={() => navigate('explorer')} aria-label="Evans, ir al explorador"><KnightMark /><span><strong>evans<span className="brand-period">.</span></strong><small>CHESS EXPLORER</small></span></button>
@@ -461,7 +345,7 @@ export default function App() {
         <button {...areaProps('italian')} onClick={() => navigate('italian')}><Network size={19} />Apertura Italiana<span className="nav-active-dot" /></button>
         <button {...areaProps(['explorer', 'tree', 'ideas'])} onClick={() => navigate('explorer')}><GitBranch size={19} />Explorador<span className="nav-active-dot" /></button>
         <button {...areaProps('repertoire')} onClick={() => navigate('repertoire')}><Bookmark size={18} />Mi repertorio{saved.length > 0 && <span className="nav-count">{saved.length}</span>}</button>
-        <button {...areaProps('practice')} onClick={() => navigate('practice')}><Target size={19} />Entrenamiento</button>
+        <button className={practice ? 'active' : ''} aria-current={practice ? 'page' : undefined} onClick={() => startExercise()}><Target size={19} />Entrenamiento</button>
       </nav>
       <div className="sidebar-divider" />
       <div className="sidebar-label">MÁS ALLÁ DE LA TEORÍA</div>
@@ -471,55 +355,39 @@ export default function App() {
         <button {...areaProps('games')} onClick={() => navigate('games')}><Crown size={19} />Partidas clásicas</button>
       </nav>
       <div className="sidebar-bottom"><div className="sidebar-quote"><span className="quote-rule" /><p>Cada jugada,<br />una intención.</p><span>MENOS MEMORIA. MÁS AJEDREZ.</span></div>
-        <div className="study-progress"><div><span>Tu progreso</span><strong>{studiedCount}<span> / {librarySize}</span></strong></div><div className="progress-track"><motion.span animate={{ width: `${studiedCount / librarySize * 100}%` }} transition={{ duration: 0.5 }} /></div><small>{studiedCount} de {librarySize} líneas estudiadas</small></div>
+        <div className="study-progress"><div><span>Tu progreso</span><strong>{studiedCount}<span> / {librarySize}</span></strong></div><div className="progress-track"><motion.span animate={{ width: `${studiedCount / librarySize * 100}%` }} transition={{ duration: 0.5 }} /></div><small>{studiedCount} de {librarySize} líneas recorridas</small></div>
         <button className="help-link" onClick={() => setHelpOpen(true)}><CircleHelp size={17} />Cómo funciona<ArrowRight size={14} /></button>
       </div>
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div className="topbar-left"><IconButton label="Abrir menú" onClick={() => setMobileNav(true)} className="mobile-menu-button"><Menu size={21} /></IconButton><BookOpen size={17} /><span>Biblioteca de aperturas</span><ChevronRight size={14} /><strong>{lesson ? lesson.title : SECTION_LABELS[view]}</strong></div><div className="topbar-right"><button className="search-trigger" onClick={() => { setSearchQuery(''); setSearchOpen(true); }}><Search size={16} /><span>Buscar una variante...</span><kbd>/</kbd></button><span className="topbar-divider" /><button className="profile-button" onClick={() => navigate('repertoire')} aria-label="Abrir mi repertorio">E</button></div></header>
-      <main className="main-content">
+      <header className="topbar"><div className="topbar-left"><IconButton label="Abrir menú" onClick={() => setMobileNav(true)} className="mobile-menu-button"><Menu size={21} /></IconButton><BookOpen size={17} /><span>Biblioteca de aperturas</span><ChevronRight size={14} /><strong>{lesson ? lesson.title : practice ? 'Entrenamiento' : SECTION_LABELS[view]}</strong></div><div className="topbar-right"><button className="search-trigger" onClick={() => { setSearchQuery(''); setSearchOpen(true); }}><Search size={16} /><span>Buscar una variante...</span><kbd>/</kbd></button><span className="topbar-divider" /><button className="profile-button" onClick={() => navigate('repertoire')} aria-label="Abrir mi repertorio">E</button></div></header>
+      <main className="main-content" id="main">
         <motion.section className="page-heading" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <div><div className="opening-eyebrow"><span className="opening-dot" />APERTURA ITALIANA<span className="eyebrow-divider" /><span>C51 - C52</span></div><h1>Gambito Evans<span className="heading-period">.</span></h1><p>Un peón por la iniciativa. Aprende a convertir el tiempo en ataque.</p></div>
           <button className={`button ${practice ? 'button-outline' : 'button-primary'} practice-cta`} onClick={() => practice ? navigate('explorer') : startExercise()}>{practice ? <ArrowLeft size={17} /> : <Target size={18} />}{practice ? 'Volver al explorador' : 'Practicar apertura'}{!practice && <ArrowRight size={16} />}</button>
         </motion.section>
 
-        <div className="study-tabs" role="tablist" aria-label="Secciones de estudio">{tabItems.map((tab) => <button key={tab.view} role="tab" aria-selected={view === tab.view} onClick={() => navigate(tab.view)} className={view === tab.view ? 'active' : ''}>{tab.icon}{tab.label}{view === tab.view && <motion.span layoutId="active-tab" className="tab-underline" transition={{ type: 'spring', stiffness: 350, damping: 32 }} />}</button>)}<span className="interactive-label"><span />Aprende en el tablero</span></div>
+        <nav className="study-tabs" aria-label="Secciones de estudio">{tabItems.map((tab) => <button key={tab.view} {...areaProps(tab.view)} onClick={() => navigate(tab.view)}>{tab.icon}{tab.label}{view === tab.view && <motion.span layoutId="active-tab" className="tab-underline" transition={{ type: 'spring', stiffness: 350, damping: 32 }} />}</button>)}<span className="interactive-label"><span />Aprende en el tablero</span></nav>
 
         <div className={`study-workspace ${expandedBoard ? 'board-expanded' : ''}`}>
-          <motion.section ref={boardRef} className="board-column" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.08 }} aria-label="Tablero interactivo">
-            <div className="board-heading">
-              <h2>{boardTitle}</h2>
-              <div className="board-heading-right">
-                <span className={`turn-pill ${game.turn() === 'w' ? 'is-white' : 'is-black'}`}><span className="pill-dot" /><span>{game.isCheckmate() ? 'Jaque mate' : game.isDraw() ? 'Tablas' : `Juegan ${game.turn() === 'w' ? 'las blancas' : 'las negras'}${game.inCheck() ? ' · jaque' : ''}`}</span></span>
-                <div className="side-switch" role="group" aria-label="Lado con el que estudias: orienta el tablero y cambia el plan que se muestra">
-                  <button type="button" aria-pressed={!flipped} title="Orientar el tablero y leer los planes desde las blancas" onClick={() => { setFlipped(false); setPlanSide('white'); }}><span className="side-dot white" />Blancas</button>
-                  <button type="button" aria-pressed={flipped} title="Orientar el tablero y leer los planes desde las negras" onClick={() => { setFlipped(true); setPlanSide('black'); }}><span className="side-dot black" />Negras</button>
-                </div>
-              </div>
-            </div>
-            {practice && <div className={`mobile-exercise-prompt ${feedback === 'correct' ? 'is-correct' : ''}`}><span>{exerciseFinished ? feedback === 'correct' ? '¡Esa es la idea!' : 'La solución' : exercise.title}</span><p>{exerciseFinished ? exercise.explanation : feedback === 'wrong' ? 'Esa jugada es legal, pero no resuelve el objetivo. Vuelve a intentarlo.' : exercise.prompt}</p></div>}
-            <div className="board-frame"><ChessBoard game={game} flipped={flipped} onMove={onBoardMove} disabled={practice && exerciseFinished} hintSquare={hintSquare} /><div className="board-dock"><MoveStrip moves={moves} ply={ply} onSelect={jumpTo} disabled={practice} /><div className="board-controls"><IconButton label="Volver a la posición del estudio" onClick={resetStudy}><RotateCcw size={17} /></IconButton><div className="transport-controls"><IconButton label="Primera posición" onClick={() => jumpTo(0)} disabled={practice || ply === 0}><ChevronsLeft size={19} /></IconButton><IconButton label="Jugada anterior (flecha izquierda)" onClick={() => jumpTo(ply - 1)} disabled={practice || ply === 0}><ChevronLeft size={21} /></IconButton><IconButton label={playing ? 'Pausar reproducción' : 'Reproducir la línea'} onClick={togglePlayback} disabled={practice} className="play-button">{playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</IconButton><IconButton label="Jugada siguiente (flecha derecha)" onClick={() => jumpTo(ply + 1)} disabled={practice || ply >= moves.length}><ChevronRight size={21} /></IconButton><IconButton label="Última posición" onClick={() => jumpTo(moves.length)} disabled={practice || ply >= moves.length}><ChevronsRight size={19} /></IconButton></div><div className="board-view-controls"><IconButton label="Girar el tablero" onClick={() => setFlipped((current) => !current)}><ArrowDownUp size={17} /></IconButton><IconButton label={expandedBoard ? 'Reducir tablero' : 'Ampliar tablero'} onClick={() => setExpandedBoard((current) => !current)}>{expandedBoard ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</IconButton></div></div></div></div>
-            <div className="board-hint"><MousePointer2 size={12} /><span>Mueve las piezas o usa las flechas. La saeta marca la última jugada.</span><span className="board-key-hints"><kbd>←</kbd><kbd>→</kbd></span></div>
-            {(freeAnalysis || defenseLine) && <div className="analysis-status"><span>{freeAnalysis ? 'Estás en análisis libre' : 'Viendo la defensa alternativa'}</span><button onClick={resetStudy}>Volver al estudio<RotateCcw size={13} /></button></div>}
-            <div className="board-annotation"><span className="annotation-icon"><Lightbulb size={22} strokeWidth={1.5} /></span><div><span className="small-label">{practice ? 'APRENDE HACIENDO' : freeAnalysis ? 'TU PROPIA EXPLORACIÓN' : gambitMoment ? 'LA IDEA DETRÁS DEL SACRIFICIO' : 'LA IDEA DE ESTA POSICIÓN'}</span><h3>{gambitMoment ? 'Un peón por la iniciativa.' : practice ? exerciseFinished ? 'Entender es recordar.' : 'Mira, piensa, juega.' : ply === 0 ? 'Todo empieza aquí.' : `${Math.ceil(ply / 2)}${ply % 2 === 0 ? '...' : '.'} ${spanishSan(moves[ply - 1] || '')}`}</h3><p>{currentNote}</p></div></div>
-          </motion.section>
+          <BoardColumn session={session} />
 
-          {!expandedBoard && <AnimatePresence mode="wait"><motion.section key={`${view}-${lessonId || 'list'}`} className="study-panel" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.22 }} aria-label="Contenido de estudio">{renderPanel()}</motion.section></AnimatePresence>}
+          {!expandedBoard && <AnimatePresence mode="wait"><motion.section key={`${view}-${lesson?.id ?? 'list'}`} className="study-panel" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.22 }} aria-label="Contenido de estudio">{renderPanel()}</motion.section></AnimatePresence>}
         </div>
         <footer className="page-footer"><span>Comprende la posición. Confía en tus ideas.</span><button onClick={() => setHelpOpen(true)}>Sobre esta biblioteca<ArrowRight size={12} /></button></footer>
       </main>
     </div>
 
-    <AnimatePresence>{toast && <motion.div className="toast" role="status" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><Check size={17} /><span>{toast}</span><button onClick={() => setToast('')} aria-label="Cerrar aviso"><X size={15} /></button></motion.div>}</AnimatePresence>
-    <AnimatePresence>{searchOpen && <Modal title="Encuentra tu próxima línea" onClose={() => setSearchOpen(false)} className="search-modal"><div className="search-input-wrap"><Search size={20} /><input data-autofocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Giuoco Piano, Lasker, f7..." aria-label="Buscar líneas, celadas y partidas" /></div><div className="search-results"><span className="small-label">{searchResults.length} RESULTADOS EN LA BIBLIOTECA</span>{searchResults.length ? searchResults.map((item) => <button className="search-result" key={item.id} onClick={() => selectLesson(item)}><span>{item.kind === 'trap' ? <Zap size={18} /> : item.kind === 'game' ? <Crown size={18} /> : <GitBranch size={18} />}</span><span><strong>{item.title}</strong><small>{item.notation}</small></span><ChevronRight size={16} /></button>) : <div className="search-empty"><Search size={26} /><p>No encontramos esa línea.</p><span>Prueba con una defensa, una jugada o un nombre.</span></div>}</div><div className="search-footer"><kbd>ESC</kbd>para cerrar<span>{allLessons.length} líneas · {italianLines.length} italianas · {traps.length} patrones · {games.length} partidas</span></div></Modal>}</AnimatePresence>
+    <AnimatePresence>{toast && <motion.div className={`toast toast-${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>{toast.tone === 'error' ? <Info size={17} /> : <Check size={17} />}<span>{toast.text}</span><button onClick={() => setToast(null)} aria-label="Cerrar aviso"><X size={15} /></button></motion.div>}</AnimatePresence>
+    <AnimatePresence>{searchOpen && <Modal title="Encuentra tu próxima línea" onClose={() => setSearchOpen(false)} className="search-modal"><div className="search-input-wrap"><Search size={20} /><input data-autofocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Giuoco Piano, Lasker, f7..." aria-label="Buscar líneas, celadas y partidas" /></div><div className="search-results"><span className="small-label">{searchResults.length} RESULTADOS EN LA BIBLIOTECA</span>{searchResults.length ? searchResults.map((item) => <button className="search-result" key={item.id} onClick={() => openSearchResult(item)}><span>{item.kind === 'trap' ? <Zap size={18} /> : item.kind === 'game' ? <Crown size={18} /> : <GitBranch size={18} />}</span><span><strong>{item.title}</strong><small>{item.notation}</small></span><ChevronRight size={16} /></button>) : <div className="search-empty"><Search size={26} /><p>No encontramos esa línea.</p><span>Prueba con una defensa, una jugada o un nombre.</span></div>}</div><div className="search-footer"><kbd>ESC</kbd>para cerrar<span>{allLessons.length} líneas · {italianLines.length} italianas · {traps.length} patrones · {games.length} partidas</span></div></Modal>}</AnimatePresence>
     <AnimatePresence>
       {helpOpen && <Modal title="Menos memoria. Más ajedrez." onClose={() => setHelpOpen(false)}>
         <p className="modal-intro">Evans es tu espacio para entender una apertura, no solo para repetir sus jugadas. El Giuoco Piano es el tronco; el gambito Evans, su rama más ambiciosa.</p>
         <div className="help-steps">
-          <div><GitBranch size={21} /><section><h3>Explora una idea</h3><p>Elige una variante, avanza con las flechas o reproduce la línea. Puedes hacer movimientos legales para investigar por tu cuenta.</p></section></div>
-          <div><Shield size={21} /><section><h3>Mira los dos lados</h3><p>Cada línea explica los planes de ambos bandos y el detalle táctico que no debes pasar por alto.</p></section></div>
-          <div><Bookmark size={21} /><section><h3>Construye tu repertorio</h3><p>Guarda variantes, practica los {exercises.length} ejercicios y exporta tus líneas comentadas en PGN. El progreso se conserva en este navegador, sin cuenta.</p></section></div>
+          <div><GitBranch size={21} /><div><h3>Explora una idea</h3><p>Elige una variante, avanza con las flechas o reproduce la línea. Puedes hacer movimientos legales para investigar por tu cuenta.</p></div></div>
+          <div><Shield size={21} /><div><h3>Mira los dos lados</h3><p>Cada línea explica los planes de ambos bandos y el detalle táctico que no debes pasar por alto.</p></div></div>
+          <div><Bookmark size={21} /><div><h3>Construye tu repertorio</h3><p>Guarda variantes, practica los {exercises.length} ejercicios y exporta tus líneas comentadas en PGN. El progreso se conserva en este navegador, sin cuenta.</p></div></div>
         </div>
         <div className="keyboard-help"><span><kbd>←</kbd><kbd>→</kbd>Recorrer jugadas</span><span><kbd>Espacio</kbd>Reproducir</span><span><kbd>/</kbd>Buscar</span></div>
         <div className="library-info">

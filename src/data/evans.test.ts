@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Chess } from 'chess.js';
 import {
-  allLessons, BASE, baseNotes, exercises, games, italianLines, italianNotes, libraryErrors,
-  makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, traps, TRUNK, variants,
-  type Lesson,
+  allLessons, BASE, baseNotes, ecoFor, exercises, games, italianLines, italianNotes, LESSON_IDS,
+  lessonById, libraryErrors, makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, traps,
+  TRUNK, variants, type Lesson,
 } from './evans.ts';
 
 const LESSON_KINDS = ['variant', 'trap', 'game'];
@@ -106,6 +106,32 @@ describe('biblioteca de líneas', () => {
       assert.notEqual(defense.join(' '), trap.moves.join(' '), `${trap.id}: la defensa repite la línea principal`);
     }
     assert.ok(declared > 0, 'ninguna celada ofrece una defensa alternativa');
+  });
+
+  it('mantiene los identificadores que la interfaz da por supuestos', () => {
+    for (const id of Object.values(LESSON_IDS)) {
+      assert.ok(allLessons.some((lesson) => lesson.id === id), `la interfaz usa la lección "${id}" y ya no existe`);
+      assert.equal(lessonById(id).id, id);
+    }
+    assert.equal(lessonById('no-existe'), allLessons[0], 'un id desconocido no debe romper la interfaz');
+  });
+
+  it('etiqueta cada ejercicio con su tema', () => {
+    for (const exercise of exercises) {
+      assert.ok(['opening', 'defense', 'trap'].includes(exercise.topic), `${exercise.id}: tema inválido`);
+    }
+    assert.ok(exercises.some((exercise) => exercise.topic === 'trap'), 'debe haber ejercicios de celadas');
+  });
+
+  it('guarda los metadatos de las partidas en los datos, no en el exportador', () => {
+    for (const game of games) {
+      assert.ok(game.players?.white && game.players?.black, `${game.id}: faltan jugadores`);
+      assert.equal(game.result, '1-0', `${game.id}: resultado esperado`);
+      assert.ok(game.year && game.year > 1800, `${game.id}: año esperado`);
+      assert.equal(ecoFor(game.moves), 'C52', `${game.id}: ambas partidas son gambito aceptado`);
+    }
+    assert.equal(ecoFor([...BASE, 'Bb6']), 'C51', 'el gambito rehusado es C51');
+    assert.equal(ecoFor([...BASE, 'Bxb4', 'c3', 'Ba5']), 'C52', 'la retirada a a5 es C52');
   });
 
   it('asigna una agudeza de 1 a 5 a cada lección', () => {
