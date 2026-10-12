@@ -13,6 +13,7 @@ import VariationTree from './components/VariationTree';
 import { useStudySession } from './hooks/useStudySession';
 import { useUrlRouting } from './hooks/useUrlRouting';
 import { currentLocation, stateFromLocation } from './state/location';
+import { browserStorage, OPENING_ID, readStoredIds, writeStoredIds, type Slot } from './storage';
 import LessonList from './panels/LessonList';
 import type { StudyUi } from './panels/types';
 import type { View } from './state/session';
@@ -43,16 +44,10 @@ const CENTRE_PLY = 15;
 const TEMPO_PLY = BASE.length + 2;
 const FIRST_TRAP_EXERCISE = Math.max(0, exercises.findIndex((exercise) => exercise.topic === 'trap'));
 
-function useStoredList(key: string, valid: Set<string>) {  const [value, setValue] = useState<string[]>(() => {
-    try {
-      const stored: unknown = JSON.parse(localStorage.getItem(key) || '[]');
-      // Se descartan los identificadores que ya no existen en la biblioteca.
-      return Array.isArray(stored)
-        ? stored.filter((item): item is string => typeof item === 'string' && valid.has(item))
-        : [];
-    } catch { return []; }
-  });
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Study remains available when storage is blocked. */ } }, [key, value]);
+function useStoredList(slot: Slot, valid: Set<string>) {
+  const storage = browserStorage();
+  const [value, setValue] = useState<string[]>(() => readStoredIds(storage, OPENING_ID, slot, valid));
+  useEffect(() => { writeStoredIds(storage, OPENING_ID, slot, value); }, [storage, slot, value]);
   return [value, setValue] as const;
 }
 
@@ -88,9 +83,9 @@ function downloadFile(content: string, name: string) {
 
 export default function App() {
   const [mobileNav, setMobileNav] = useState(false);
-  const [saved, setSaved] = useStoredList('evans-repertoire-v1', LESSON_IDS_SET);
-  const [completed, setCompleted] = useStoredList('evans-studied-v1', LESSON_IDS_SET);
-  const [solved, setSolved] = useStoredList('evans-exercises-v1', EXERCISE_IDS_SET);
+  const [saved, setSaved] = useStoredList('saved', LESSON_IDS_SET);
+  const [completed, setCompleted] = useStoredList('studied', LESSON_IDS_SET);
+  const [solved, setSolved] = useStoredList('solved', EXERCISE_IDS_SET);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
