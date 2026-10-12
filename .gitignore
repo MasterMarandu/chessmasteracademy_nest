@@ -1,0 +1,36 @@
+# Dependencias
+node_modules/
+
+# Salida de compilación
+# dist/ debe seguir ignorado: Tailwind escanea el proyecto para detectar clases
+# y, si ve el HTML del build anterior, lo trata como si fuera código fuente.
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+*.local
+
+# Registros y depuración
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cobertura de pruebas
+coverage/
+
+# Archivos temporales de verificación
+.tmp-*
+
+# Editores y sistema operativo
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

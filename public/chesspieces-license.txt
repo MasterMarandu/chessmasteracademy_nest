@@ -1,0 +1,14 @@
+Chess Piece Artwork
+
+The board's SVG piece artwork in src/components/ChessPiece.tsx adapts
+the Cburnett chess-piece family by Colin M. L. Burnett (Cburnett).
+Changes include colors, line weights, details, and simplified silhouettes.
+
+Source: https://commons.wikimedia.org/wiki/Template:SVG_chess_pieces
+Author: https://commons.wikimedia.org/wiki/User:Cburnett
+License: Creative Commons Attribution-ShareAlike 3.0 Unported
+https://creativecommons.org/licenses/by-sa/3.0/
+
+The adapted piece artwork is distributed under the same CC BY-SA 3.0
+license. This artwork notice does not apply to unrelated application code
+or the custom Evans brand mark.
