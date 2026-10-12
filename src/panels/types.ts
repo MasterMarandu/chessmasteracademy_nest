@@ -8,8 +8,12 @@ export interface StudyUi {
   completed: string[];
   toggleSaved: (lesson: Lesson) => void;
   toggleCompleted: (lessonId: string) => void;
-  notify: (tone: 'ok' | 'error', text: string) => void;
-  closeSearch: () => void;
+  /** Descarga en PGN la línea abierta en el tablero. */
+  exportLesson: () => void;
+  /** Copia la posición actual al portapapeles (con modal de reserva si el navegador no deja). */
+  copyFen: () => void;
+  /** Descarga en PGN una colección de líneas: el repertorio guardado. */
+  exportRepertoire: (items: Lesson[]) => void;
 }
 
 export interface PanelProps {

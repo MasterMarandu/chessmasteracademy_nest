@@ -1,8 +1,8 @@
 import { allLessons, exercises, makeGame } from '../data/evans.ts';
+import { OPENING_ID } from '../storage.ts';
 import { INITIAL_SESSION, sessionReducer, type SessionState, type View } from './session.ts';
 
-/** La apertura activa. Con el catálogo multi-apertura esto pasará a ser un parámetro. */
-export const OPENING_SLUG = 'italiana';
+export { OPENING_ID };
 
 export const SECTION_SLUGS: Record<View, string> = {
   italian: 'italiana',
@@ -30,7 +30,7 @@ export const DEFAULT_LOCATION: AppLocation = { view: 'explorer', lessonId: null,
 
 /** Ruta canónica: /italiana/celadas/fork-f7 o /italiana/entrenamiento/2 */
 export function formatPath(location: AppLocation): string {
-  const parts = [OPENING_SLUG];
+  const parts = [OPENING_ID];
   if (location.exerciseIndex !== null) parts.push(PRACTICE_SLUG, String(location.exerciseIndex));
   else {
     parts.push(SECTION_SLUGS[location.view]);
@@ -46,9 +46,12 @@ export function formatPath(location: AppLocation): string {
 export function parseUrl(input: string, knownLessons: Set<string>): AppLocation | null {
   const hash = input.includes('#') ? input.slice(input.indexOf('#') + 1) : '';
   const raw = hash || input.replace(/^[a-z]+:\/\/[^/]+/i, '').split('?')[0];
-  const segments = raw.split('/').filter(Boolean).map((part) => decodeURIComponent(part));
+  const segments = raw.split('/').filter(Boolean).map((part) => {
+    // Un % suelto en la barra de direcciones no debe tumbar la lectura de la ruta.
+    try { return decodeURIComponent(part); } catch { return part; }
+  });
   if (!segments.length) return null;
-  if (segments[0] === OPENING_SLUG) segments.shift();
+  if (segments[0] === OPENING_ID) segments.shift();
   if (!segments.length) return DEFAULT_LOCATION;
 
   if (segments[0] === PRACTICE_SLUG) {

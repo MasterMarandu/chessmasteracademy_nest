@@ -360,6 +360,21 @@ export function lessonById(id: string): Lesson {
   return allLessons.find((lesson) => lesson.id === id) ?? allLessons[0];
 }
 
+// Lecciones que la interfaz referencia por identificador, nunca por posición en el array.
+export const MAIN_LINE = lessonById(LESSON_IDS.main);
+export const LASKER = lessonById(LESSON_IDS.lasker);
+export const MODERN = lessonById(LESSON_IDS.modern);
+export const DECLINED = lessonById(LESSON_IDS.declined);
+export const COMPROMISED = lessonById(LESSON_IDS.compromised);
+
+// Ply de la posición con el centro montado (d4-e4) en la línea principal,
+// y de la jugada 5. c3 que gana un tiempo sobre el alfil.
+export const CENTRE_PLY = 15;
+export const TEMPO_PLY = BASE.length + 2;
+
+/** Índice del primer ejercicio de celadas: el atajo del panel las lleva al tablero. */
+export const FIRST_TRAP_EXERCISE = Math.max(0, exercises.findIndex((exercise) => exercise.topic === 'trap'));
+
 // Qualitative "agudeza" meter: how forced and double-edged a line tends to be.
 // It is a study aid, not an engine evaluation.
 export const sharpness: Record<string, number> = {

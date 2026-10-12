@@ -1,5 +1,5 @@
 {
-  "name": "react-vite-tailwind",
+  "name": "evans-chess-explorer",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -13,12 +13,10 @@
   },
   "dependencies": {
     "chess.js": "^1.4.0",
-    "clsx": "2.1.1",
     "framer-motion": "^14.1.0",
     "lucide-react": "^1.55.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "tailwind-merge": "3.4.0"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.17",
