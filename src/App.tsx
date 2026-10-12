@@ -19,6 +19,13 @@ import {
 } from './data/evans';
 
 type View = 'italian' | 'explorer' | 'tree' | 'ideas' | 'traps' | 'defense' | 'practice' | 'repertoire' | 'games';
+
+// Etiqueta de la miga de pan: dónde estás dentro de la biblioteca.
+const SECTION_LABELS: Record<View, string> = {
+  italian: 'Apertura Italiana', explorer: 'Gambito Evans', tree: 'Árbol de variantes',
+  ideas: 'Ideas y planes', traps: 'Patrones tácticos', defense: 'Defensa del Evans',
+  practice: 'Entrenamiento', repertoire: 'Mi repertorio', games: 'Partidas clásicas',
+};
 type Feedback = 'idle' | 'wrong' | 'correct' | 'revealed';
 
 function useStoredList(key: string) {
@@ -108,7 +115,8 @@ export default function App() {
   const exercise = exercises[exerciseIndex];
   const practice = view === 'practice';
   const exerciseFinished = feedback === 'correct' || feedback === 'revealed';
-  const studiedCount = variants.filter((item) => completed.includes(item.id)).length;
+  const studiedCount = allLessons.filter((item) => completed.includes(item.id)).length;
+  const librarySize = allLessons.length;
   const searchResults = allLessons.filter((item) => normalizeSearch(`${item.title} ${item.subtitle} ${item.notation}`).includes(normalizeSearch(searchQuery)));
   const hintSquare = useMemo(() => {
     if (!practice || !showHint || exerciseFinished) return undefined;
@@ -297,12 +305,18 @@ export default function App() {
     { view: 'defense', label: 'Defensa', icon: <Shield size={16} /> },
   ];
 
+  function areaProps(target: View | View[]) {
+    const views = Array.isArray(target) ? target : [target];
+    const active = views.includes(view);
+    return { className: active ? 'active' : '', 'aria-current': active ? 'page' as const : undefined };
+  }
+
   function renderLessonRows(items: Lesson[], showLevel = true) {
     return <div className="variant-list">{items.map((item, index) => <motion.div className="variant-list-item" key={item.id}
       initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-8px' }}
       transition={{ duration: 0.34, delay: Math.min(index * 0.045, 0.25), ease: 'easeOut' }}>
       <button className={`variant-row ${item.id === 'main' && view === 'explorer' ? 'recommended' : ''}`} onClick={() => selectLesson(item)}>
-        <span className={`variant-symbol ${item.kind === 'trap' ? 'tactical' : ''}`}>{item.kind === 'trap' ? <Zap size={19} /> : item.kind === 'game' ? <Crown size={20} /> : item.id === 'main' ? <GitBranch size={20} /> : <span>{String(index + 1).padStart(2, '0')}</span>}</span>
+        <span className={`variant-symbol ${item.kind === 'trap' ? 'tactical' : ''}`}>{item.kind === 'trap' ? <Zap size={19} /> : item.kind === 'game' ? <Crown size={20} /> : <span>{String(index + 1).padStart(2, '0')}</span>}</span>
         <span className="variant-copy"><span className="variant-title">{item.title}{completed.includes(item.id) && <Check size={13} className="completed-tick" />}</span><span className="variant-notation">{item.notation}</span></span>
         <span className="row-meta">
           {item.id === 'main' && view === 'explorer' ? <span className="recommended-cta"><span>Explorar línea<ArrowRight size={12} /></span></span> : showLevel && <span className={`level level-${item.level.toLowerCase()}`}>{item.level}</span>}
@@ -373,6 +387,7 @@ export default function App() {
       <div className="panel-intro explorer-intro"><h2>Una apertura. Muchos caminos.</h2><p>Entiende cada respuesta. Encuentra tu forma de jugar. Las líneas se cargan directamente en el tablero.</p></div>
       <div className="list-heading"><h3>Variantes principales</h3><span>{variants.length} líneas de estudio</span></div>
       <div className="family-filter" role="group" aria-label="Filtrar variantes">{([['all', 'Todas'], ['accepted', 'Aceptado'], ['declined', 'Rehusado'], ['other', 'Otras']] as const).map(([value, label]) => <button key={value} aria-pressed={family === value} className={family === value ? 'active' : ''} onClick={() => { setFamily(value); setShowAll(false); }}>{label}{value === 'all' && <span>{variants.length}</span>}</button>)}</div>
+      <p className="list-legend"><Info size={13} /><span><strong>Esencial · Intermedia · Avanzada</strong> indica por dónde empezar. <strong>Agudeza</strong> mide cuán forzada y táctica es la línea, de Sólida a Letal.</span></p>
       {renderLessonRows(visible)}
       {filtered.length > 5 && <button className="show-all-button" onClick={() => setShowAll((current) => !current)}>{showAll ? 'Mostrar las esenciales' : `Ver las ${filtered.length} variantes`}<ChevronDown size={15} className={showAll ? 'rotated' : ''} /></button>}
       <div className="defense-invitation">
@@ -443,26 +458,26 @@ export default function App() {
       <button className="brand" onClick={() => navigate('explorer')} aria-label="Evans, ir al explorador"><KnightMark /><span><strong>evans<span className="brand-period">.</span></strong><small>CHESS EXPLORER</small></span></button>
       <div className="sidebar-label">TU ESPACIO DE ESTUDIO</div>
       <nav className="sidebar-nav" aria-label="Navegación principal">
-        <button className={view === 'italian' ? 'active' : ''} onClick={() => navigate('italian')}><Network size={19} />Apertura Italiana<span className="nav-active-dot" /></button>
-        <button className={view === 'explorer' || view === 'tree' || view === 'ideas' ? 'active' : ''} onClick={() => navigate('explorer')}><GitBranch size={19} />Explorador<span className="nav-active-dot" /></button>
-        <button className={view === 'repertoire' ? 'active' : ''} onClick={() => navigate('repertoire')}><Bookmark size={18} />Mi repertorio{saved.length > 0 && <span className="nav-count">{saved.length}</span>}</button>
-        <button className={view === 'practice' ? 'active' : ''} onClick={() => navigate('practice')}><Target size={19} />Entrenamiento</button>
+        <button {...areaProps('italian')} onClick={() => navigate('italian')}><Network size={19} />Apertura Italiana<span className="nav-active-dot" /></button>
+        <button {...areaProps(['explorer', 'tree', 'ideas'])} onClick={() => navigate('explorer')}><GitBranch size={19} />Explorador<span className="nav-active-dot" /></button>
+        <button {...areaProps('repertoire')} onClick={() => navigate('repertoire')}><Bookmark size={18} />Mi repertorio{saved.length > 0 && <span className="nav-count">{saved.length}</span>}</button>
+        <button {...areaProps('practice')} onClick={() => navigate('practice')}><Target size={19} />Entrenamiento</button>
       </nav>
       <div className="sidebar-divider" />
       <div className="sidebar-label">MÁS ALLÁ DE LA TEORÍA</div>
       <nav className="sidebar-nav secondary-nav" aria-label="Recursos de aprendizaje">
-        <button className={view === 'traps' ? 'active' : ''} onClick={() => navigate('traps')}><Zap size={18} />Patrones tácticos</button>
-        <button className={view === 'defense' ? 'active' : ''} onClick={() => navigate('defense')}><Shield size={18} />Defensa del Evans</button>
-        <button className={view === 'games' ? 'active' : ''} onClick={() => navigate('games')}><Crown size={19} />Partidas clásicas</button>
+        <button {...areaProps('traps')} onClick={() => navigate('traps')}><Zap size={18} />Patrones tácticos</button>
+        <button {...areaProps('defense')} onClick={() => navigate('defense')}><Shield size={18} />Defensa del Evans</button>
+        <button {...areaProps('games')} onClick={() => navigate('games')}><Crown size={19} />Partidas clásicas</button>
       </nav>
       <div className="sidebar-bottom"><div className="sidebar-quote"><span className="quote-rule" /><p>Cada jugada,<br />una intención.</p><span>MENOS MEMORIA. MÁS AJEDREZ.</span></div>
-        <div className="study-progress"><div><span>Tu progreso</span><strong>{studiedCount}<span> / {variants.length}</span></strong></div><div className="progress-track"><motion.span animate={{ width: `${studiedCount / variants.length * 100}%` }} transition={{ duration: 0.5 }} /></div><small>de {variants.length} líneas recorridas hasta el final</small></div>
+        <div className="study-progress"><div><span>Tu progreso</span><strong>{studiedCount}<span> / {librarySize}</span></strong></div><div className="progress-track"><motion.span animate={{ width: `${studiedCount / librarySize * 100}%` }} transition={{ duration: 0.5 }} /></div><small>{studiedCount} de {librarySize} líneas estudiadas</small></div>
         <button className="help-link" onClick={() => setHelpOpen(true)}><CircleHelp size={17} />Cómo funciona<ArrowRight size={14} /></button>
       </div>
     </aside>
 
     <div className="main-shell">
-      <header className="topbar"><div className="topbar-left"><IconButton label="Abrir menú" onClick={() => setMobileNav(true)} className="mobile-menu-button"><Menu size={21} /></IconButton><BookOpen size={17} /><span>Biblioteca de aperturas</span><ChevronRight size={14} /><strong>Gambito Evans</strong></div><div className="topbar-right"><button className="search-trigger" onClick={() => { setSearchQuery(''); setSearchOpen(true); }}><Search size={16} /><span>Buscar una variante...</span><kbd>/</kbd></button><span className="topbar-divider" /><button className="profile-button" onClick={() => navigate('repertoire')} aria-label="Abrir mi repertorio">E</button></div></header>
+      <header className="topbar"><div className="topbar-left"><IconButton label="Abrir menú" onClick={() => setMobileNav(true)} className="mobile-menu-button"><Menu size={21} /></IconButton><BookOpen size={17} /><span>Biblioteca de aperturas</span><ChevronRight size={14} /><strong>{lesson ? lesson.title : SECTION_LABELS[view]}</strong></div><div className="topbar-right"><button className="search-trigger" onClick={() => { setSearchQuery(''); setSearchOpen(true); }}><Search size={16} /><span>Buscar una variante...</span><kbd>/</kbd></button><span className="topbar-divider" /><button className="profile-button" onClick={() => navigate('repertoire')} aria-label="Abrir mi repertorio">E</button></div></header>
       <main className="main-content">
         <motion.section className="page-heading" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <div><div className="opening-eyebrow"><span className="opening-dot" />APERTURA ITALIANA<span className="eyebrow-divider" /><span>C51 - C52</span></div><h1>Gambito Evans<span className="heading-period">.</span></h1><p>Un peón por la iniciativa. Aprende a convertir el tiempo en ataque.</p></div>
@@ -477,9 +492,9 @@ export default function App() {
               <h2>{boardTitle}</h2>
               <div className="board-heading-right">
                 <span className={`turn-pill ${game.turn() === 'w' ? 'is-white' : 'is-black'}`}><span className="pill-dot" /><span>{game.isCheckmate() ? 'Jaque mate' : game.isDraw() ? 'Tablas' : `Juegan ${game.turn() === 'w' ? 'las blancas' : 'las negras'}${game.inCheck() ? ' · jaque' : ''}`}</span></span>
-                <div className="side-switch" role="group" aria-label="Elegir el bando desde el que mirar">
-                  <button type="button" aria-pressed={!flipped} onClick={() => { setFlipped(false); setPlanSide('white'); }}><span className="side-dot white" />Blancas</button>
-                  <button type="button" aria-pressed={flipped} onClick={() => { setFlipped(true); setPlanSide('black'); }}><span className="side-dot black" />Negras</button>
+                <div className="side-switch" role="group" aria-label="Lado con el que estudias: orienta el tablero y cambia el plan que se muestra">
+                  <button type="button" aria-pressed={!flipped} title="Orientar el tablero y leer los planes desde las blancas" onClick={() => { setFlipped(false); setPlanSide('white'); }}><span className="side-dot white" />Blancas</button>
+                  <button type="button" aria-pressed={flipped} title="Orientar el tablero y leer los planes desde las negras" onClick={() => { setFlipped(true); setPlanSide('black'); }}><span className="side-dot black" />Negras</button>
                 </div>
               </div>
             </div>
