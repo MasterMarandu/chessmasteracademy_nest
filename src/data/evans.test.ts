@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Chess } from 'chess.js';
 import {
-  allLessons, BASE, baseNotes, exercises, games, libraryErrors,
-  makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, traps, variants,
+  allLessons, BASE, baseNotes, exercises, games, italianLines, italianNotes, libraryErrors,
+  makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, traps, TRUNK, variants,
   type Lesson,
 } from './evans.ts';
 
 const LESSON_KINDS = ['variant', 'trap', 'game'];
-const FAMILIES = ['accepted', 'declined', 'other'];
+const FAMILIES = ['accepted', 'declined', 'other', 'italian'];
 const LEVELS = ['Esencial', 'Intermedia', 'Avanzada'];
 
 function replay(moves: string[]): Chess {
@@ -31,10 +31,26 @@ describe('biblioteca de líneas', () => {
     }
   });
 
-  it('empieza cada variante y celada desde la posición del gambito', () => {
-    for (const lesson of [...variants, ...traps]) {
-      const opening = lesson.moves.slice(0, BASE.length).join(' ');
-      assert.equal(opening, BASE.join(' '), `${lesson.id} no arranca desde la posición base`);
+  it('arranca desde el tronco italiano o desde la posición del gambito', () => {
+    for (const lesson of allLessons) {
+      const italian = lesson.family === 'italian';
+      const expected = italian ? TRUNK : BASE;
+      assert.equal(lesson.moves.slice(0, expected.length).join(' '), expected.join(' '),
+        `${lesson.id} no arranca desde ${italian ? 'el tronco italiano' : 'la posición del gambito'}`);
+    }
+  });
+
+  it('separa el Giuoco Piano del gambito en la cuarta jugada', () => {
+    const picks = ['giuoco-classical', 'giuoco-pianissimo', 'main'].map((id) => {
+      const lesson = allLessons.find((item) => item.id === id);
+      assert.ok(lesson, `falta la lección ${id}`);
+      return lesson;
+    });
+    assert.deepEqual(picks.map((lesson) => lesson.moves[TRUNK.length]), ['c3', 'd3', 'b4']);
+    for (const line of italianLines) {
+      assert.equal(line.family, 'italian');
+      assert.ok(!variants.includes(line), `${line.id} no debe aparecer en el explorador del Evans`);
+      assert.ok(line.startPly > TRUNK.length, `${line.id} debería empezar después del tronco`);
     }
   });
 
@@ -74,6 +90,9 @@ describe('biblioteca de líneas', () => {
     for (const lesson of allLessons) withinBounds(lesson, lesson.notes);
     for (const key of Object.keys(baseNotes)) {
       assert.ok(Number(key) <= BASE.length, `baseNotes: la nota ${key} supera la posición base`);
+    }
+    for (const key of Object.keys(italianNotes)) {
+      assert.ok(Number(key) <= TRUNK.length, `italianNotes: la nota ${key} supera el tronco italiano`);
     }
   });
 

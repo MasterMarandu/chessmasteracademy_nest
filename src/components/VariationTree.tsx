@@ -112,7 +112,7 @@ export default function VariationTree({ moves, ply, onSelect }: {
     <div className="tree-panel">
       <div className="tree-head">
         <div>
-          <div className="eyebrow">TODO EL GAMBITO EN UN MAPA</div>
+          <div className="eyebrow">TODA LA APERTURA EN UN MAPA</div>
           <h3>El árbol de variantes</h3>
         </div>
         <button type="button" className="text-button" onClick={() => onSelect([], 0)}><RotateCcw size={13} />Desde el inicio</button>
@@ -129,7 +129,7 @@ export default function VariationTree({ moves, ply, onSelect }: {
       <ul className="tree-root">
         <li className="tree-node">
           <div className={`tree-row root-row${ply === 0 ? ' current' : ''}`}>
-            <button type="button" className="tree-start" onClick={() => onSelect([], 0)}>Posición inicial · 1. e4 e5 2. Cf3 Cc6 3. Ac4 Ac5 4. b4</button>
+            <button type="button" className="tree-start" onClick={() => onSelect([], 0)}>Posición inicial · 1. e4 e5 2. Cf3 Cc6 3. Ac4 Ac5 · el tronco italiano</button>
           </div>
           <ul className="tree-children root-children">{renderNodes(tree, 0)}</ul>
         </li>

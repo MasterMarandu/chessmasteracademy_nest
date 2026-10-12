@@ -5,7 +5,7 @@ import {
   ArrowDownUp, ArrowLeft, ArrowRight, BookOpen, Bookmark, Check, CheckCheck,
   ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   CircleHelp, Copy, Crown, Download, GitBranch, Info, Lightbulb, ListTree,
-  Maximize2, Menu, Minimize2, MousePointer2, Pause, Play, RotateCcw,
+  Maximize2, Menu, Minimize2, MousePointer2, Network, Pause, Play, RotateCcw,
   Search, Shield, Target, X, Zap,
 } from 'lucide-react';
 import ChessBoard from './components/ChessBoard';
@@ -13,12 +13,12 @@ import { KnightMark } from './components/ChessPiece';
 import Modal from './components/Modal';
 import VariationTree from './components/VariationTree';
 import {
-  allLessons, BASE, baseNotes, exercises, games, libraryErrors,
-  makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, traps, variants,
+  allLessons, BASE, baseNotes, exercises, games, italianLines, italianNotes, libraryErrors,
+  makeGame, normalizeSearch, sharpness, sharpnessLabel, spanishSan, TRUNK, traps, variants,
   type Family, type Lesson,
 } from './data/evans';
 
-type View = 'explorer' | 'tree' | 'ideas' | 'traps' | 'defense' | 'practice' | 'repertoire' | 'games';
+type View = 'italian' | 'explorer' | 'tree' | 'ideas' | 'traps' | 'defense' | 'practice' | 'repertoire' | 'games';
 type Feedback = 'idle' | 'wrong' | 'correct' | 'revealed';
 
 function useStoredList(key: string) {
@@ -171,14 +171,15 @@ export default function App() {
 
   function navigate(next: View) {
     if (next === 'practice') { startExercise(); return; }
-    setView(next); setLessonId(null); setMoves(BASE); setPly(BASE.length);
+    const opening = next === 'italian' ? TRUNK : BASE;
+    setView(next); setLessonId(null); setMoves(opening); setPly(opening.length);
     setPlaying(false); setFreeAnalysis(false); setDefenseLine(false); setExpandedBoard(false);
     setMobileNav(false); setFamily('all'); setShowAll(false); setFlipped(next === 'defense');
   }
 
   function selectLesson(next: Lesson, side?: 'white' | 'black') {
     try { makeGame(next.moves); } catch { setToast('Esta línea no está disponible. Prueba otra variante.'); return; }
-    const nextView: View = next.kind === 'trap' ? 'traps' : next.kind === 'game' ? 'games' : (view === 'defense' || view === 'repertoire') ? view : 'explorer';
+    const nextView: View = next.kind === 'trap' ? 'traps' : next.kind === 'game' ? 'games' : (view === 'defense' || view === 'repertoire' || view === 'italian') ? view : 'explorer';
     setView(nextView); setLessonId(next.id); setMoves(next.moves); setPly(next.startPly);
     setPlanSide(side || (nextView === 'defense' ? 'black' : 'white'));
     setPlaying(false); setFreeAnalysis(false); setDefenseLine(false); setSearchOpen(false);
@@ -189,7 +190,8 @@ export default function App() {
 
   function resetStudy() {
     if (practice) { startExercise(exerciseIndex); return; }
-    setMoves(lesson?.moves || BASE); setPly(lesson?.startPly || BASE.length);
+    const opening = view === 'italian' ? TRUNK : BASE;
+    setMoves(lesson?.moves || opening); setPly(lesson?.startPly || opening.length);
     setPlaying(false); setFreeAnalysis(false); setDefenseLine(false);
   }
 
@@ -197,7 +199,7 @@ export default function App() {
 
   function selectFromTree(path: string[], nodePly: number) {
     setPlaying(false); setFreeAnalysis(false); setDefenseLine(false);
-    if (!path.length) { setLessonId(null); setMoves(BASE); setPly(0); return; }
+    if (!path.length) { setLessonId(null); setMoves(TRUNK); setPly(0); return; }
     const key = path.join();
     const match = allLessons
       .filter((item) => item.moves.slice(0, path.length).join() === key)
@@ -267,10 +269,11 @@ export default function App() {
       result.move(move);
       if (original && item?.notes[index + 1]) result.setComment(item.notes[index + 1]);
     });
-    result.setHeader('Event', item?.title || 'Gambito Evans - Análisis');
+    result.setHeader('Event', item?.title || 'Apertura Italiana - Análisis');
     result.setHeader('White', item?.id === 'evergreen' ? 'Adolf Anderssen' : item?.id === 'fischer-fine' ? 'Bobby Fischer' : 'Blancas');
     result.setHeader('Black', item?.id === 'evergreen' ? 'Jean Dufresne' : item?.id === 'fischer-fine' ? 'Reuben Fine' : 'Negras');
-    result.setHeader('ECO', sequence[9] === 'Ba5' ? 'C52' : 'C51');
+    // El código ECO sólo se declara donde está verificado: el Evans aceptado o rehusado.
+    if (item && item.family !== 'italian') result.setHeader('ECO', sequence[9] === 'Ba5' ? 'C52' : 'C51');
     if (item?.kind === 'game' && sequence.join() === item.moves.join()) result.setHeader('Result', '1-0');
     return result.pgn();
   }
@@ -286,6 +289,7 @@ export default function App() {
   }
 
   const tabItems: { view: View; label: string; icon: ReactNode }[] = [
+    { view: 'italian', label: 'Italiana', icon: <Network size={16} /> },
     { view: 'explorer', label: 'Explorador', icon: <GitBranch size={16} /> },
     { view: 'tree', label: 'Árbol', icon: <ListTree size={16} /> },
     { view: 'ideas', label: 'Ideas y planes', icon: <Lightbulb size={16} /> },
@@ -316,7 +320,7 @@ export default function App() {
     const attackingPlan = whiteDefender ? lesson.blackPlan : lesson.whitePlan;
     const defendingPlan = whiteDefender ? lesson.whitePlan : lesson.blackPlan;
     return <div>
-      <div className="detail-topline"><button className="back-link" onClick={() => navigate(view)}><ArrowLeft size={15} />{view === 'repertoire' ? 'Mi repertorio' : lesson.kind === 'trap' ? 'Todas las celadas' : lesson.kind === 'game' ? 'Partidas clásicas' : 'Todas las variantes'}</button><span className={`level level-${lesson.level.toLowerCase()}`}>{lesson.level}</span></div>
+      <div className="detail-topline"><button className="back-link" onClick={() => navigate(view)}><ArrowLeft size={15} />{view === 'italian' ? 'La apertura italiana' : view === 'repertoire' ? 'Mi repertorio' : lesson.kind === 'trap' ? 'Todas las celadas' : lesson.kind === 'game' ? 'Partidas clásicas' : 'Todas las variantes'}</button><span className={`level level-${lesson.level.toLowerCase()}`}>{lesson.level}</span></div>
       <div className="detail-title-row"><h2>{lesson.title}</h2><IconButton label={saved.includes(lesson.id) ? 'Quitar del repertorio' : 'Guardar en mi repertorio'} onClick={() => toggleSaved(lesson)} className={saved.includes(lesson.id) ? 'is-saved' : ''}><Bookmark size={21} fill={saved.includes(lesson.id) ? 'currentColor' : 'none'} /></IconButton></div>
       <div className="detail-meta"><p className="detail-notation">{lesson.notation}</p><p className="detail-sharp"><span>Agudeza</span><SharpnessMeter id={lesson.id} size="lg" /><em>{sharpnessLabel(sharpness[lesson.id] ?? 3)}</em></p></div>
       <p className="detail-description">{lesson.description}</p>
@@ -335,6 +339,31 @@ export default function App() {
       <div className="detail-actions"><button className="button button-outline" onClick={() => { setCompleted((current) => current.includes(lesson.id) ? current.filter((id) => id !== lesson.id) : [...current, lesson.id]); }}>{completed.includes(lesson.id) ? <CheckCheck size={17} /> : <Check size={17} />}{completed.includes(lesson.id) ? 'Estudiada' : 'Marcar como estudiada'}</button><IconButton label="Descargar esta línea en PGN" onClick={exportStudy}><Download size={18} /></IconButton><IconButton label="Copiar posición FEN" onClick={copyFen}><Copy size={17} /></IconButton></div>
       {lesson.source && <a className="source-link" href={lesson.source} target="_blank" rel="noreferrer">Consultar la fuente<ArrowRight size={12} /></a>}
     </div>;
+  }
+
+  function renderItalian() {
+    const trunkLine = TRUNK.map((move, index) => `${index % 2 === 0 ? `${index / 2 + 1}.` : ''}${spanishSan(move)}`).join(' ');
+    return <>
+      <div className="panel-intro"><div className="eyebrow">EL TRONCO COMÚN</div><h2>Giuoco Piano: la casa del Evans.</h2><p>Todo empieza en 1. e4 e5 2. Cf3 Cc6 3. Ac4 Ac5. Desde esa posición, las blancas deciden el carácter de la partida.</p></div>
+      <div className="italian-trunk"><span className="small-label">POSICIÓN DEL TRONCO</span><strong>{trunkLine}</strong></div>
+      <div className="list-heading"><h3>Tres caminos desde la misma posición</h3><span>{italianLines.length + 1} ramas</span></div>
+      <div className="italian-map">
+        {italianLines.map((line) => <button key={line.id} className="italian-branch" onClick={() => selectLesson(line)}>
+          <span className="italian-branch-move">{`4. ${spanishSan(line.moves[TRUNK.length])}`}</span>
+          <strong>{line.title}</strong>
+          <p>{line.subtitle}</p>
+          <em>Estudiar la línea<ArrowRight size={12} /></em>
+        </button>)}
+        <button className="italian-branch is-gambit" onClick={() => navigate('explorer')}>
+          <span className="italian-branch-move">4. b4</span>
+          <strong>Gambito Evans</strong>
+          <p>El peón se entrega a cambio de tiempo y centro. Es el corazón de esta biblioteca: {variants.length} variantes, {traps.length} celadas y {games.length} partidas clásicas.</p>
+          <em>Ir al explorador del Evans<ArrowRight size={12} /></em>
+        </button>
+      </div>
+      <p className="quiet-note"><Info size={15} />c3 y d3 conservan el material y discuten el centro; b4 lo entrega a cambio de desarrollo. Ninguna es mejor en abstracto: son estilos distintos, y cada una pide un plan diferente.</p>
+      <button className="button button-outline" onClick={resetStudy}><RotateCcw size={16} />Volver al tronco en el tablero</button>
+    </>;
   }
 
   function renderExplorer() {
@@ -371,7 +400,7 @@ export default function App() {
       </div>
       <div className="practice-actions">{exerciseFinished ? <><button className="button button-primary" onClick={() => startExercise(exerciseIndex + 1)}>{exerciseIndex === exercises.length - 1 ? 'Volver a practicar' : 'Siguiente ejercicio'}<ArrowRight size={16} /></button><button className="text-button" onClick={() => startExercise(exerciseIndex)}><RotateCcw size={14} />Reintentar</button></> : <><button className="button button-outline" onClick={() => setShowHint((current) => !current)}><Lightbulb size={16} />{showHint ? 'Ocultar pista' : 'Dame una pista'}</button><button className="text-button" onClick={revealAnswer}>Ver solución</button></>}</div>
       <div className="practice-tip"><MousePointer2 size={17} /><p>Haz clic en una pieza y después en su destino. También puedes arrastrarla.</p></div>
-      {solved.length === exercises.length && <div className="all-complete"><Crown size={24} /><h3>Las ideas ya son tuyas.</h3><p>Has resuelto los 8 ejercicios. Vuelve a las variantes para seguir profundizando.</p><button className="text-button" onClick={() => navigate('explorer')}>Explorar variantes<ArrowRight size={15} /></button></div>}
+      {solved.length === exercises.length && <div className="all-complete"><Crown size={24} /><h3>Las ideas ya son tuyas.</h3><p>Has resuelto los {exercises.length} ejercicios. Vuelve a las variantes para seguir profundizando.</p><button className="text-button" onClick={() => navigate('explorer')}>Explorar variantes<ArrowRight size={15} /></button></div>}
     </div>;
   }
 
@@ -388,6 +417,7 @@ export default function App() {
       </div>}
     </>;
     if (lesson) return renderDetail();
+    if (view === 'italian') return renderItalian();
     if (view === 'explorer') return renderExplorer();
     if (view === 'traps') return <><div className="panel-intro"><div className="eyebrow">LA TÁCTICA CAMBIA LA PARTIDA</div><h2>Ve la amenaza antes que tu rival.</h2><p>Cuatro patrones para atacar mejor y no caer en la trampa.</p></div>{renderLessonRows(traps)}<p className="quiet-note"><Info size={15} />Cada celada incluye una explicación y, cuando la posición lo permite, una alternativa defensiva reproducible.</p><button className="button button-outline" onClick={() => startExercise(5)}><Target size={17} />Practicar las celadas<ArrowRight size={16} /></button></>;
     if (view === 'games') return <><div className="panel-intro"><div className="eyebrow">APRENDE DE LOS MAESTROS</div><h2>Ideas que hicieron historia.</h2><p>Dos partidas completas para ver el gambito en acción.</p></div>{renderLessonRows(games, false)}<div className="editorial-note"><span>1852</span><h3>El ajedrez también puede ser arte.</h3><p>Avanza jugada a jugada, observa cómo se coordinan las piezas y descubre el momento en que la iniciativa se convierte en ataque.</p></div></>;
@@ -403,8 +433,9 @@ export default function App() {
     </div><button className="button button-outline" onClick={() => startExercise()}><Target size={16} />Lleva las ideas a la práctica<ArrowRight size={15} /></button></>;
   }
 
-  const currentNote = freeAnalysis ? 'Estás explorando tu propia línea. Puedes mover ambos bandos, retroceder o volver al estudio original. No hay un motor jugando.' : defenseLine ? (lesson?.defendingSide === 'white' ? lesson.whitePlan : lesson?.blackPlan) : practice ? (exerciseFinished ? exercise.explanation : 'Observa la posición y juega en el tablero. La respuesta está en la idea, no en memorizar.') : lesson?.notes[ply] || baseNotes[ply] || (view === 'ideas' ? variants[0].notes[ply] : undefined) || 'Observa el centro, la seguridad de los reyes y las piezas que todavía necesitan desarrollarse.';
-  const boardTitle = practice ? `Ejercicio ${exerciseIndex + 1}` : freeAnalysis ? 'Análisis libre' : defenseLine ? 'La defensa alternativa' : lesson ? lesson.title : view === 'ideas' && ply > 7 ? 'La idea sobre el tablero' : 'Posición inicial del Evans';
+  const currentNote = freeAnalysis ? 'Estás explorando tu propia línea. Puedes mover ambos bandos, retroceder o volver al estudio original. No hay un motor jugando.' : defenseLine ? (lesson?.defendingSide === 'white' ? lesson.whitePlan : lesson?.blackPlan) : practice ? (exerciseFinished ? exercise.explanation : 'Observa la posición y juega en el tablero. La respuesta está en la idea, no en memorizar.') : lesson?.notes[ply] || (view === 'italian' ? italianNotes[ply] : undefined) || baseNotes[ply] || (view === 'ideas' ? variants[0].notes[ply] : undefined) || 'Observa el centro, la seguridad de los reyes y las piezas que todavía necesitan desarrollarse.';
+  const boardTitle = practice ? `Ejercicio ${exerciseIndex + 1}` : freeAnalysis ? 'Análisis libre' : defenseLine ? 'La defensa alternativa' : lesson ? lesson.title : view === 'italian' ? 'La apertura italiana' : view === 'ideas' && ply > 7 ? 'La idea sobre el tablero' : 'Posición inicial del Evans';
+  const gambitMoment = ply === 7 && !practice && view !== 'italian' && lesson?.family !== 'italian';
 
   return <MotionConfig reducedMotion="user"><div className="app-shell">
     {mobileNav && <button className="sidebar-scrim" onClick={() => setMobileNav(false)} aria-label="Cerrar menú" />}
@@ -412,6 +443,7 @@ export default function App() {
       <button className="brand" onClick={() => navigate('explorer')} aria-label="Evans, ir al explorador"><KnightMark /><span><strong>evans<span className="brand-period">.</span></strong><small>CHESS EXPLORER</small></span></button>
       <div className="sidebar-label">TU ESPACIO DE ESTUDIO</div>
       <nav className="sidebar-nav" aria-label="Navegación principal">
+        <button className={view === 'italian' ? 'active' : ''} onClick={() => navigate('italian')}><Network size={19} />Apertura Italiana<span className="nav-active-dot" /></button>
         <button className={view === 'explorer' || view === 'tree' || view === 'ideas' ? 'active' : ''} onClick={() => navigate('explorer')}><GitBranch size={19} />Explorador<span className="nav-active-dot" /></button>
         <button className={view === 'repertoire' ? 'active' : ''} onClick={() => navigate('repertoire')}><Bookmark size={18} />Mi repertorio{saved.length > 0 && <span className="nav-count">{saved.length}</span>}</button>
         <button className={view === 'practice' ? 'active' : ''} onClick={() => navigate('practice')}><Target size={19} />Entrenamiento</button>
@@ -437,7 +469,7 @@ export default function App() {
           <button className={`button ${practice ? 'button-outline' : 'button-primary'} practice-cta`} onClick={() => practice ? navigate('explorer') : startExercise()}>{practice ? <ArrowLeft size={17} /> : <Target size={18} />}{practice ? 'Volver al explorador' : 'Practicar apertura'}{!practice && <ArrowRight size={16} />}</button>
         </motion.section>
 
-        <div className="study-tabs" role="tablist" aria-label="Secciones del gambito">{tabItems.map((tab) => <button key={tab.view} role="tab" aria-selected={view === tab.view} onClick={() => navigate(tab.view)} className={view === tab.view ? 'active' : ''}>{tab.icon}{tab.label}{view === tab.view && <motion.span layoutId="active-tab" className="tab-underline" transition={{ type: 'spring', stiffness: 350, damping: 32 }} />}</button>)}<span className="interactive-label"><span />Aprende en el tablero</span></div>
+        <div className="study-tabs" role="tablist" aria-label="Secciones de estudio">{tabItems.map((tab) => <button key={tab.view} role="tab" aria-selected={view === tab.view} onClick={() => navigate(tab.view)} className={view === tab.view ? 'active' : ''}>{tab.icon}{tab.label}{view === tab.view && <motion.span layoutId="active-tab" className="tab-underline" transition={{ type: 'spring', stiffness: 350, damping: 32 }} />}</button>)}<span className="interactive-label"><span />Aprende en el tablero</span></div>
 
         <div className={`study-workspace ${expandedBoard ? 'board-expanded' : ''}`}>
           <motion.section ref={boardRef} className="board-column" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.08 }} aria-label="Tablero interactivo">
@@ -455,7 +487,7 @@ export default function App() {
             <div className="board-frame"><ChessBoard game={game} flipped={flipped} onMove={onBoardMove} disabled={practice && exerciseFinished} hintSquare={hintSquare} /><div className="board-dock"><MoveStrip moves={moves} ply={ply} onSelect={jumpTo} disabled={practice} /><div className="board-controls"><IconButton label="Volver a la posición del estudio" onClick={resetStudy}><RotateCcw size={17} /></IconButton><div className="transport-controls"><IconButton label="Primera posición" onClick={() => jumpTo(0)} disabled={practice || ply === 0}><ChevronsLeft size={19} /></IconButton><IconButton label="Jugada anterior (flecha izquierda)" onClick={() => jumpTo(ply - 1)} disabled={practice || ply === 0}><ChevronLeft size={21} /></IconButton><IconButton label={playing ? 'Pausar reproducción' : 'Reproducir la línea'} onClick={togglePlayback} disabled={practice} className="play-button">{playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</IconButton><IconButton label="Jugada siguiente (flecha derecha)" onClick={() => jumpTo(ply + 1)} disabled={practice || ply >= moves.length}><ChevronRight size={21} /></IconButton><IconButton label="Última posición" onClick={() => jumpTo(moves.length)} disabled={practice || ply >= moves.length}><ChevronsRight size={19} /></IconButton></div><div className="board-view-controls"><IconButton label="Girar el tablero" onClick={() => setFlipped((current) => !current)}><ArrowDownUp size={17} /></IconButton><IconButton label={expandedBoard ? 'Reducir tablero' : 'Ampliar tablero'} onClick={() => setExpandedBoard((current) => !current)}>{expandedBoard ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</IconButton></div></div></div></div>
             <div className="board-hint"><MousePointer2 size={12} /><span>Mueve las piezas o usa las flechas. La saeta marca la última jugada.</span><span className="board-key-hints"><kbd>←</kbd><kbd>→</kbd></span></div>
             {(freeAnalysis || defenseLine) && <div className="analysis-status"><span>{freeAnalysis ? 'Estás en análisis libre' : 'Viendo la defensa alternativa'}</span><button onClick={resetStudy}>Volver al estudio<RotateCcw size={13} /></button></div>}
-            <div className="board-annotation"><span className="annotation-icon"><Lightbulb size={22} strokeWidth={1.5} /></span><div><span className="small-label">{practice ? 'APRENDE HACIENDO' : freeAnalysis ? 'TU PROPIA EXPLORACIÓN' : ply === 7 ? 'LA IDEA DETRÁS DEL SACRIFICIO' : 'LA IDEA DE ESTA POSICIÓN'}</span><h3>{ply === 7 && !practice ? 'Un peón por la iniciativa.' : practice ? exerciseFinished ? 'Entender es recordar.' : 'Mira, piensa, juega.' : ply === 0 ? 'Todo empieza aquí.' : `${Math.ceil(ply / 2)}${ply % 2 === 0 ? '...' : '.'} ${spanishSan(moves[ply - 1] || '')}`}</h3><p>{currentNote}</p></div></div>
+            <div className="board-annotation"><span className="annotation-icon"><Lightbulb size={22} strokeWidth={1.5} /></span><div><span className="small-label">{practice ? 'APRENDE HACIENDO' : freeAnalysis ? 'TU PROPIA EXPLORACIÓN' : gambitMoment ? 'LA IDEA DETRÁS DEL SACRIFICIO' : 'LA IDEA DE ESTA POSICIÓN'}</span><h3>{gambitMoment ? 'Un peón por la iniciativa.' : practice ? exerciseFinished ? 'Entender es recordar.' : 'Mira, piensa, juega.' : ply === 0 ? 'Todo empieza aquí.' : `${Math.ceil(ply / 2)}${ply % 2 === 0 ? '...' : '.'} ${spanishSan(moves[ply - 1] || '')}`}</h3><p>{currentNote}</p></div></div>
           </motion.section>
 
           {!expandedBoard && <AnimatePresence mode="wait"><motion.section key={`${view}-${lessonId || 'list'}`} className="study-panel" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.22 }} aria-label="Contenido de estudio">{renderPanel()}</motion.section></AnimatePresence>}
@@ -465,19 +497,19 @@ export default function App() {
     </div>
 
     <AnimatePresence>{toast && <motion.div className="toast" role="status" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}><Check size={17} /><span>{toast}</span><button onClick={() => setToast('')} aria-label="Cerrar aviso"><X size={15} /></button></motion.div>}</AnimatePresence>
-    <AnimatePresence>{searchOpen && <Modal title="Encuentra tu próxima línea" onClose={() => setSearchOpen(false)} className="search-modal"><div className="search-input-wrap"><Search size={20} /><input data-autofocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Lasker, f7, gambito rehusado..." aria-label="Buscar variantes, celadas y partidas" /></div><div className="search-results"><span className="small-label">{searchResults.length} RESULTADOS EN LA BIBLIOTECA</span>{searchResults.length ? searchResults.map((item) => <button className="search-result" key={item.id} onClick={() => selectLesson(item)}><span>{item.kind === 'trap' ? <Zap size={18} /> : item.kind === 'game' ? <Crown size={18} /> : <GitBranch size={18} />}</span><span><strong>{item.title}</strong><small>{item.notation}</small></span><ChevronRight size={16} /></button>) : <div className="search-empty"><Search size={26} /><p>No encontramos esa línea.</p><span>Prueba con una defensa, una jugada o un nombre.</span></div>}</div><div className="search-footer"><kbd>ESC</kbd>para cerrar<span>14 variantes · 4 patrones · 2 partidas</span></div></Modal>}</AnimatePresence>
+    <AnimatePresence>{searchOpen && <Modal title="Encuentra tu próxima línea" onClose={() => setSearchOpen(false)} className="search-modal"><div className="search-input-wrap"><Search size={20} /><input data-autofocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Giuoco Piano, Lasker, f7..." aria-label="Buscar líneas, celadas y partidas" /></div><div className="search-results"><span className="small-label">{searchResults.length} RESULTADOS EN LA BIBLIOTECA</span>{searchResults.length ? searchResults.map((item) => <button className="search-result" key={item.id} onClick={() => selectLesson(item)}><span>{item.kind === 'trap' ? <Zap size={18} /> : item.kind === 'game' ? <Crown size={18} /> : <GitBranch size={18} />}</span><span><strong>{item.title}</strong><small>{item.notation}</small></span><ChevronRight size={16} /></button>) : <div className="search-empty"><Search size={26} /><p>No encontramos esa línea.</p><span>Prueba con una defensa, una jugada o un nombre.</span></div>}</div><div className="search-footer"><kbd>ESC</kbd>para cerrar<span>{allLessons.length} líneas · {italianLines.length} italianas · {traps.length} patrones · {games.length} partidas</span></div></Modal>}</AnimatePresence>
     <AnimatePresence>
       {helpOpen && <Modal title="Menos memoria. Más ajedrez." onClose={() => setHelpOpen(false)}>
-        <p className="modal-intro">Evans es tu espacio para entender una apertura, no solo para repetir sus jugadas.</p>
+        <p className="modal-intro">Evans es tu espacio para entender una apertura, no solo para repetir sus jugadas. El Giuoco Piano es el tronco; el gambito Evans, su rama más ambiciosa.</p>
         <div className="help-steps">
           <div><GitBranch size={21} /><section><h3>Explora una idea</h3><p>Elige una variante, avanza con las flechas o reproduce la línea. Puedes hacer movimientos legales para investigar por tu cuenta.</p></section></div>
           <div><Shield size={21} /><section><h3>Mira los dos lados</h3><p>Cada línea explica los planes de ambos bandos y el detalle táctico que no debes pasar por alto.</p></section></div>
-          <div><Bookmark size={21} /><section><h3>Construye tu repertorio</h3><p>Guarda variantes, practica los 8 ejercicios y exporta tus líneas comentadas en PGN. El progreso se conserva en este navegador, sin cuenta.</p></section></div>
+          <div><Bookmark size={21} /><section><h3>Construye tu repertorio</h3><p>Guarda variantes, practica los {exercises.length} ejercicios y exporta tus líneas comentadas en PGN. El progreso se conserva en este navegador, sin cuenta.</p></section></div>
         </div>
         <div className="keyboard-help"><span><kbd>←</kbd><kbd>→</kbd>Recorrer jugadas</span><span><kbd>Espacio</kbd>Reproducir</span><span><kbd>/</kbd>Buscar</span></div>
         <div className="library-info">
           <h3>Una biblioteca para aprender</h3>
-          <p>Incluye 14 variantes principales y alternativas, no todas las ramas teóricas posibles. Las líneas son ejemplos didácticos, no victorias forzadas. No se utiliza un motor de evaluación.</p>
+          <p>Incluye las {italianLines.length} líneas del Giuoco Piano y las {variants.length} variantes del gambito Evans con sus alternativas, no todas las ramas teóricas posibles. Las líneas son ejemplos didácticos, no victorias forzadas. No se utiliza un motor de evaluación.</p>
           <p>{libraryErrors.length === 0 ? 'Todas las secuencias de esta biblioteca pasan la validación de movimientos legales de chess.js.' : `Se detectaron ${libraryErrors.length} líneas pendientes de revisión.`}</p>
           <div className="source-links"><a href="https://en.wikipedia.org/wiki/Evans_Gambit" target="_blank" rel="noreferrer">Teoría y nomenclatura<ArrowRight size={12} /></a><a href="https://www.365chess.com/eco/C52_Evans_gambit_Lasker_defence" target="_blank" rel="noreferrer">Defensa Lasker<ArrowRight size={12} /></a></div>
           <p className="art-credit">Piezas adaptadas del conjunto de <a href="https://commons.wikimedia.org/wiki/User:Cburnett" target="_blank" rel="noreferrer">Cburnett</a>, con cambios de color y trazado. <a href="/chesspieces-license.txt" target="_blank" rel="noreferrer">CC BY-SA 3.0</a>.</p>

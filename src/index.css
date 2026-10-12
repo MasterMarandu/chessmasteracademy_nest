@@ -421,6 +421,18 @@ button, a { transition: background 160ms ease, color 160ms ease, border-color 16
 .defense-invitation-more > svg { transition: transform 160ms ease; }
 .defense-invitation-more:hover > svg { transform: translateX(3px); }
 
+.italian-trunk { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 13px; border-radius: 6px; background: #f1f5e9; border: 1px solid #e3ead5; }
+.italian-trunk > strong { font-family: 'Lora', Georgia, serif; font-size: 15px; font-weight: 500; color: #3f5a31; letter-spacing: -.2px; }
+.italian-map { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 20px; }
+.italian-branch { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 14px 13px; border: 1px solid #dbe6c8; border-radius: 8px; background: #fffefa; text-align: left; }
+.italian-branch:hover { border-color: #a8c483; background: #fff; transform: translateY(-1px); }
+.italian-branch-move { font-family: 'Lora', Georgia, serif; font-size: 17px; color: #6f8c52; letter-spacing: -.3px; }
+.italian-branch > strong { font-size: 11.5px; font-weight: 600; color: #4d6b39; }
+.italian-branch > p { font-size: 10.5px; line-height: 1.7; color: #82926f; }
+.italian-branch > em { display: inline-flex; align-items: center; gap: 5px; margin-top: auto; padding-top: 6px; font-style: normal; font-size: 10px; font-weight: 600; color: #5d7f45; }
+.italian-branch:hover > em { color: #375c24; }
+.italian-branch.is-gambit { border-color: #cfdec0; background: linear-gradient(180deg, #eef5e4, #f7faf1); }
+
 .detail-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 9px; }
 .detail-notation { margin-top: 0; }
 .detail-sharp { display: flex; align-items: center; gap: 8px; font-size: 9px; color: #94a085; }
@@ -640,12 +652,14 @@ button, a { transition: background 160ms ease, color 160ms ease, border-color 16
 
 @media (max-width: 1230px) {
   .defense-invitation-grid { grid-template-columns: 1fr 1fr; }
+  .italian-map { grid-template-columns: 1fr 1fr; }
   .tree-tag { max-width: 46%; }
 }
 
 @media (max-width: 700px) {
   .defense-invitation { margin-top: 20px; padding: 16px 15px 0; }
   .defense-invitation-grid { grid-template-columns: 1fr; gap: 6px; }
+  .italian-map { grid-template-columns: 1fr; }
   .board-heading { margin-bottom: 11px; }
   .board-heading h2 { font-size: 11.5px; }
   .turn-pill { font-size: 9px; padding: 4px 8px 4px 7px; }

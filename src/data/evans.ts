@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js';
 
 export type LessonKind = 'variant' | 'trap' | 'game';
-export type Family = 'accepted' | 'declined' | 'other';
+export type Family = 'accepted' | 'declined' | 'other' | 'italian';
 export interface Lesson {
   id: string;
   title: string;
@@ -22,7 +22,11 @@ export interface Lesson {
   source?: string;
 }
 
-export const BASE = ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'b4'];
+// The shared trunk of the Italian Game: both the Giuoco Piano and the Evans
+// Gambit leave this position, so every line in the library starts here.
+export const TRUNK = ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5'];
+
+export const BASE = [...TRUNK, 'b4'];
 const accepted = [...BASE, 'Bxb4', 'c3'];
 const line = (continuation: string) => [...accepted, ...continuation.split(' ')];
 const fromBase = (continuation: string) => [...BASE, ...continuation.split(' ')];
@@ -37,6 +41,69 @@ export const baseNotes: Record<number, string> = {
   6: 'La Apertura Italiana está sobre el tablero. Ahora las blancas cambian el ritmo.',
   7: '¡El gambito! Las blancas ofrecen el peón b4 para desviar el alfil de c5. La idea: ganar un tempo con c3, abrir el centro con d4 y desarrollar más rápido que las negras.',
 };
+
+// Notes for the shared Italian trunk, shown while no lesson is open.
+export const italianNotes: Record<number, string> = {
+  0: 'La apertura italiana empieza aquí. Elige una rama a la derecha para ver cómo cambia el carácter de la partida.',
+  1: 'e4 ocupa el centro y abre diagonales para la dama y el alfil de f1.',
+  2: 'Las negras responden simétricamente con e5.',
+  3: 'Cf3 desarrolla y ataca e5.',
+  4: 'Cc6 defiende e5 y controla d4.',
+  5: 'Ac4 apunta a f7, el punto más débil del campo negro.',
+  6: 'El tronco común: los dos bandos han desarrollado alfil y caballo y disputan el centro. Desde aquí, c3, d3 y b4 llevan a partidas completamente distintas.',
+};
+
+export const italianLines: Lesson[] = [
+  {
+    id: 'giuoco-classical', title: 'Giuoco Piano clásico', subtitle: '4. c3 abre el centro. La partida se decide calculando.',
+    notation: '1. e4 e5 2. Cf3 Cc6 3. Ac4 Ac5 4. c3', kind: 'variant', family: 'italian', level: 'Intermedia',
+    moves: [...TRUNK, ...'c3 Nf6 d4 exd4 cxd4 Bb4+ Nc3 Nxe4 O-O Bxc3 d5 Bf6 Re1 Ne7 Rxe4 d6'.split(' ')],
+    startPly: 7,
+    description: 'El Giuoco Piano clásico: c3 prepara d4 y deja la casilla c3 para el caballo. Si las negras capturan en e4, la partida entra en el ataque Møller, donde un peón importa menos que la iniciativa.',
+    whitePlan: 'Juega d4, bloquea el jaque con el caballo de b1 y enroca. Con el rey a salvo, d5 gana espacio y Txe4 recupera la pieza. Cada jugada debe crear una amenaza.',
+    blackPlan: 'Responde con ...Cf6 y ...Ab4+. Si tomas en e4, devuelve material a tiempo: ...Af6 y ...Cge7 sostienen la posición mientras completas el desarrollo.',
+    warning: 'Es la línea más aguda del Giuoco Piano. La compensación blanca son diagonales y tiempos, no un ataque forzado: sin cálculo preciso, el peón de menos pesa.',
+    notes: {
+      6: 'La posición del Giuoco Piano: ambos bandos han desarrollado alfil y caballo y se disputan el centro.',
+      7: 'c3 prepara d4 y reserva la casilla c3 para el caballo. Es la jugada que define el Giuoco Piano clásico.',
+      8: 'Cf6 ataca e4 y vigila d5.',
+      9: 'd4 golpea el centro. Las negras deben decidir: si capturan, las blancas recapturan con el peón de c3.',
+      11: 'La recaptura con el peón deja a las blancas un centro móvil y la columna c semiabierta.',
+      12: 'Ab4+ aprovecha que c3 quedó vacío: el alfil da jaque y obliga a las blancas a bloquear con una pieza.',
+      14: 'Cxe4 gana un peón. El precio es el tiempo que tardará el caballo en volver a la partida.',
+      15: 'El enroque pone al rey a salvo y deja la torre de f1 lista para atacar e4.',
+      16: 'Axc3 elimina al defensor del centro y daña la estructura blanca. Es la jugada crítica de la línea.',
+      17: 'd5 es el corazón del ataque Møller: el peón se ofrece para abrir líneas y ganar tiempos sobre el caballo de c6.',
+      19: 'Te1 ataca al caballo de e4 y prepara la recuperación de la pieza.',
+      21: 'Txe4 recupera la pieza. Las blancas tienen un peón de menos, pero todas sus piezas miran al rey negro.',
+      22: 'd6 sostiene el centro y frena las rupturas blancas. La posición sigue siendo aguda: hay que calcular.',
+    },
+    source: 'https://es.wikipedia.org/wiki/Giuoco_Piano',
+  },
+  {
+    id: 'giuoco-pianissimo', title: 'Giuoco Pianissimo', subtitle: '4. d3: la alternativa posicional al gambito.',
+    notation: '1. e4 e5 2. Cf3 Cc6 3. Ac4 Ac5 4. d3', kind: 'variant', family: 'italian', level: 'Esencial',
+    moves: [...TRUNK, ...'d3 Nf6 O-O d6 c3 a6 Bb3 Ba7 Re1 O-O'.split(' ')],
+    startPly: 7,
+    description: 'El «juego lentísimo»: las blancas renuncian a la ruptura inmediata y construyen una posición sólida. Es la elección de quien prefiere maniobrar antes que calcular.',
+    whitePlan: 'Enroca pronto, sostén e4 con d3 y prepara c3 con calma. Mejora las piezas, ocupa la columna e y elige el momento de abrir el centro.',
+    blackPlan: 'Copia el esquema: ...Cf6, ...d6, enroque y ...a6 con ...Aa7 para conservar el alfil. Busca ...Te8 y ...Ae6 antes de abrir la posición.',
+    warning: 'No hay tácticas inmediatas ni una jugada que gane por sí sola. Sin un plan de desarrollo, la ventaja de espacio se evapora.',
+    notes: {
+      6: 'El mismo tronco que el Giuoco Piano clásico: la diferencia es la jugada siguiente.',
+      7: 'd3 sostiene e4 y evita abrir el centro. Las blancas se reservan d4 para más adelante.',
+      9: 'El enroque antes de definir el centro: el rey está seguro y la torre de f1 mira a la columna e.',
+      10: 'd6 refuerza e5 y abre paso al alfil de c8.',
+      11: 'c3 quiere jugar d4 en el momento oportuno. Es la idea del Giuoco Piano, pero con más piezas desarrolladas.',
+      12: 'a6 prepara una retirada cómoda para el alfil antes de decidir el centro.',
+      13: 'Ab3 aparta el alfil de c4, donde ...Ca5 y ...b5 lo molestarían, y mantiene la mira sobre f7.',
+      14: 'Aa7 conserva el alfil en la diagonal y mantiene la presión sobre el centro.',
+      15: 'Te1 ocupa la columna abierta: la torre entra en juego antes de que se defina la estructura.',
+      16: 'Con los reyes seguros, empieza la maniobra. Aquí gana quien tenga las piezas mejor colocadas, no quien calcule más.',
+    },
+    source: 'https://es.wikipedia.org/wiki/Giuoco_Piano',
+  },
+];
 
 export const variants: Lesson[] = [
   {
@@ -272,11 +339,12 @@ export const exercises: Exercise[] = [
   { id: 'mieses-break', title: 'El contragolpe central', prompt: 'Tu caballo ya está en e7. Juega la ruptura que disputa el centro blanco.', moves: line('Ba5 d4 exd4 O-O Nge7 cxd4'), answer: 'd5', hint: 'El peón de d7 puede avanzar dos casillas.', explanation: 'd5! transforma la defensa en contrajuego. Tras exd5, el caballo de e7 puede recuperar.' },
 ];
 
-export const allLessons = [...variants, ...traps, ...games];
+export const allLessons = [...italianLines, ...variants, ...traps, ...games];
 
 // Qualitative "agudeza" meter: how forced and double-edged a line tends to be.
 // It is a study aid, not an engine evaluation.
 export const sharpness: Record<string, number> = {
+  'giuoco-classical': 5, 'giuoco-pianissimo': 2,
   main: 4, lasker: 2, modern: 2, declined: 1, classical: 4, 'stone-ware': 2,
   compromised: 5, anderssen: 5, mieses: 4, tartakower: 4, alapin: 3, knight: 3,
   counter: 4, cordel: 2, 'fork-f7': 5, 'knight-fork': 4, pin: 2, 'poisoned-rook': 5,
