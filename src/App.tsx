@@ -11,6 +11,8 @@ import { KnightMark } from './components/ChessPiece';
 import Modal from './components/Modal';
 import VariationTree from './components/VariationTree';
 import { useStudySession } from './hooks/useStudySession';
+import { useUrlRouting } from './hooks/useUrlRouting';
+import { currentLocation, stateFromLocation } from './state/location';
 import LessonList from './panels/LessonList';
 import type { StudyUi } from './panels/types';
 import type { View } from './state/session';
@@ -95,12 +97,17 @@ export default function App() {
   const [fenOpen, setFenOpen] = useState(false);
   const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
+  // El enlace de la barra de direcciones manda en el primer render: sin parpadeo de vista.
+  const [initialSession] = useState(() => stateFromLocation(currentLocation()));
+
   // Toda la sesión de estudio vive en el reducer: modos excluyentes, lado y orientación.
   const session = useStudySession({
+    initial: initialSession,
     onLineCompleted: (id) => setCompleted((current) => current.includes(id) ? current : [...current, id]),
     onExerciseSolved: (id) => setSolved((current) => current.includes(id) ? current : [...current, id]),
     onToast: (tone, text) => setToast({ tone, text }),
   });
+  useUrlRouting(session);
   const {
     view, lesson, moves, ply, game, expandedBoard, family, showAll, planSide,
     exercise, exerciseIndex, feedback, showHint, practice, exerciseFinished,

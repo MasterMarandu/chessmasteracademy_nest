@@ -4,10 +4,14 @@ import {
   allLessons, BASE, baseNotes, exercises, italianNotes, makeGame, TRUNK, type Family, type Lesson,
 } from '../data/evans.ts';
 import {
-  INITIAL_SESSION, isFlipped, isPractice, sessionReducer, type Feedback, type SessionMode, type Side, type View,
+  INITIAL_SESSION, isFlipped, isPractice, sessionReducer,
+  type Feedback, type SessionMode, type SessionState, type Side, type View,
 } from '../state/session.ts';
+import type { AppLocation } from '../state/location.ts';
 
 interface Options {
+  /** Estado inicial: permite arrancar directamente en el enlace de la barra de direcciones. */
+  initial?: SessionState;
   /** Se llama cuando se recorre una línea hasta el final. */
   onLineCompleted?: (lessonId: string) => void;
   /** Se llama al resolver un ejercicio. */
@@ -15,8 +19,8 @@ interface Options {
   onToast?: (tone: 'ok' | 'error', text: string) => void;
 }
 
-export function useStudySession({ onLineCompleted, onExerciseSolved, onToast }: Options = {}) {
-  const [state, dispatch] = useReducer(sessionReducer, INITIAL_SESSION);
+export function useStudySession({ initial, onLineCompleted, onExerciseSolved, onToast }: Options = {}) {
+  const [state, dispatch] = useReducer(sessionReducer, initial ?? INITIAL_SESSION);
   const boardRef = useRef<HTMLElement>(null);
 
   const lesson = allLessons.find((item) => item.id === state.lessonId) ?? null;
@@ -169,6 +173,16 @@ export function useStudySession({ onLineCompleted, onExerciseSolved, onToast }: 
     }
   }
 
+  /** Aplica un enlace de la barra de direcciones al estado de estudio. */
+  function restore(location: AppLocation) {
+    if (location.exerciseIndex !== null) { startExercise(location.exerciseIndex); return; }
+    if (location.lessonId) {
+      const found = allLessons.find((item) => item.id === location.lessonId);
+      if (found) { openLesson(found); return; }
+    }
+    navigate(location.view);
+  }
+
   // Rótulo y nota del tablero: un switch exhaustivo sobre el modo, no una cadena de ternarios.
   const boardTitle = ((): string => {
     switch (state.mode.kind) {
@@ -219,7 +233,7 @@ export function useStudySession({ onLineCompleted, onExerciseSolved, onToast }: 
     practice, exerciseFinished, hintSquare, boardTitle, boardNote, gambitMoment,
     // acciones
     navigate, openLesson, startExercise, loadDefense, reset, jumpTo, togglePlayback, revealAnswer,
-    openTreeLine, playMove, showPosition,
+    openTreeLine, playMove, showPosition, restore,
     chooseSide: (side: Side) => dispatch({ type: 'chooseSide', side }),
     rotate: () => dispatch({ type: 'rotate' }),
     setFamily: (family: Family | 'all') => dispatch({ type: 'setFamily', family }),
